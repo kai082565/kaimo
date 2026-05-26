@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket_no }} — 當票詳情{% endblock %}
+{% block page_title %}當票詳情{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>返回列表
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+
+  <!-- Left: ticket info + actions -->
+  <div class="col-lg-5">
+
+    <!-- Header card -->
+    <div class="card p-4 mb-3">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <div class="fw-bold" style="font-size:1.5rem; letter-spacing:.05em">{{ ticket.ticket_no }}</div>
+          <div class="text-muted" style="font-size:.83rem">開立於 {{ ticket.created_at[:16] }}</div>
+        </div>
+        <div>
+          {% if ticket.is_overdue %}
+            <span class="status-badge badge-overdue">逾期</span>
+          {% elif ticket.status == 'active' %}
+            <span class="status-badge badge-active">當中</span>
+          {% elif ticket.status == 'redeemed' %}
+            <span class="status-badge badge-redeemed">已贖回</span>
+          {% else %}
+            <span class="status-badge badge-forfeited">已流當</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <hr class="divider my-2">
+
+      <div class="row g-2" style="font-size:.9rem">
+        <div class="col-5 text-muted">客戶</div>
+        <div class="col-7 fw-semibold">
+          {% if ticket.customer_id %}
+            <a href="{{ url_for('customer_detail', customer_id=ticket.customer_id) }}">
+              {{ ticket.customer_name }}
+            </a>
+            {% if ticket.customer_phone %}
+              <div class="text-muted" style="font-size:.78rem">{{ ticket.customer_phone }}</div>
+            {% endif %}
+          {% else %}臨時客戶{% endif %}
+        </div>
+
+        <div class="col-5 text-muted">物品</div>
+        <div class="col-7 fw-semibold">{{ ticket.item_name }}</div>
+
+        {% if ticket.item_description %}
+        <div class="col-5 text-muted">描述</div>
+        <div class="col-7 text-muted" style="font-size:.83rem">{{ ticket.item_description }}</div>
+        {% endif %}
+
+        <div class="col-5 text-muted">分類</div>
+        <div class="col-7">{{ ticket.category_name or '—' }}</div>
+
+        <div class="col-5 text-muted">典當金額</div>
+        <div class="col-7 fw-bold text-blue" style="font-size:1.1rem">{{ "{:,.0f}".format(ticket.principal) }} 元</div>
+
+        <div class="col-5 text-muted">月利率</div>
+        <div class="col-7">{{ ticket.monthly_rate }}%</div>
+
+        <div class="col-5 text-muted">典當日</div>
+        <div class="col-7">{{ ticket.pawn_date }}</div>
+
+        <div class="col-5 text-muted">到期日</div>
+        <div class="col-7 {% if ticket.is_overdue %}text-red fw-semibold{% endif %}">
+          {{ ticket.due_date }}
+          {% if ticket.is_overdue %}<i class="bi bi-exclamation-triangle ms-1"></i>{% endif %}
+        </div>
+
+        {% if ticket.notes %}
+        <div class="col-5 text-muted">備註</div>
+        <div class="col-7 text-muted" style="font-size:.83rem">{{ ticket.notes }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Interest calculator (only for active) -->
+    {% if ticket.status == 'active' %}
+    <div class="card p-4 mb-3">
+      <div class="section-title"><i class="bi bi-calculator me-1"></i>利息計算器</div>
+
+      <div class="mb-3">
+        <label class="form-label">計算至日期</label>
+        <input type="date" id="calcDate" class="form-control" value="{{ today }}">
+      </div>
+
+      <div class="calc-result" id="calcResult">
+        <div class="calc-row">
+          <span class="text-muted">本金</span>
+          <span id="r_principal">—</span>
+        </div>
+        <div class="calc-row">
+          <span class="text-muted">計算月數</span>
+          <span id="r_months">—</span>
+        </div>
+        <div class="calc-row">
+          <span class="text-muted">利息（{{ ticket.monthly_rate }}% × 月數）</span>
+          <span id="r_interest" class="text-amber">—</span>
+        </div>
+        <div class="calc-row total">
+          <span>應收合計</span>
+          <span id="r_total">—</span>
+        </div>
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+
+  <!-- Right: history -->
+  <div class="col-lg-7">
+    <div class="section-title"><i class="bi bi-journal-text me-1"></i>操作歷史</div>
+    <div class="card p-4">
+      {% if ticket.history %}
+      <ul class="timeline">
+        {% for h in ticket.history %}
+        <li class="timeline-item">
+          <div class="timeline-dot
+            {% if h.action=='created' %}bg-primary bg-opacity-25{% elif h.action=='redeemed' %}bg-success bg-opacity-25{% elif h.action=='renewed' %}bg-warning bg-opacity-25{% else %}bg-danger bg-opacity-25{% endif %}">
+            <i class="bi bi-{% if h.action=='created' %}plus{% elif h.action=='redeemed' %}check-lg{% elif h.action=='renewed' %}arrow-clockwise{% else %}slash-circle{% endif %}
+              {% if h.action=='created' %}text-blue{% elif h.action=='redeemed' %}text-green{% elif h.action=='renewed' %}text-amber{% else %}text-red{% endif %}"></i>
+          </div>
+          <div class="timeline-body">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-semibold" style="font-size:.9rem">
+                {% if h.action=='created' %}開立當票
+                {% elif h.action=='redeemed' %}贖回
+                {% elif h.action=='renewed' %}續當
+                {% else %}流當
+                {% endif %}
+              </span>
+              <span class="text-muted" style="font-size:.75rem">{{ h.action_date[:16] }}</span>
+            </div>
+            <div style="font-size:.83rem; color:var(--text-muted)">
+              {% if h.principal %}本金 {{ "{:,.0f}".format(h.principal) }} 元{% endif %}
+              {% if h.interest %} · 利息 <span class="text-amber">{{ "{:,.0f}".format(h.interest) }}</span> 元（{{ h.months }}月）{% endif %}
+              {% if h.total_amount %} · 合計 <span class="text-green fw-semibold">{{ "{:,.0f}".format(h.total_amount) }}</span> 元{% endif %}
+              {% if h.new_due_date %} · 新到期日 {{ h.new_due_date }}{% endif %}
+            </div>
+            {% if h.notes and h.notes not in ['開立當票','贖回','續當','流當'] %}
+            <div class="text-muted" style="font-size:.78rem; margin-top:.2rem">{{ h.notes }}</div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state py-2">
+        <i class="bi bi-inbox"></i>
+        <div>暫無紀錄</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Redeem Modal -->
+{% if ticket.status == 'active' %}
+<div class="modal fade" id="redeemModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <form method="post" action="{{ url_for('redeem', ticket_id=ticket.id) }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h5 class="modal-title"><i class="bi bi-check-circle text-green me-2"></i>確認贖回</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">贖回日期</label>
+            <input type="date" name="calc_date" class="form-control" value="{{ today }}" id="redeemDate">
+          </div>
+          <div class="calc-result" id="redeemCalc">
+            <div class="calc-row">
+              <span class="text-muted">本金</span>
+              <span>{{ "{:,.0f}".format(ticket.principal) }} 元</span>
+            </div>
+            <div class="calc-row">
+              <span class="text-muted">利息</span>
+              <span id="m_interest" class="text-amber">—</span>
+            </div>
+            <div class="calc-row total">
+              <span>客戶應付合計</span>
+              <span id="m_total">—</span>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">備註</label>
+            <input type="text" name="notes" class="form-control" placeholder="選填">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-success">確認贖回</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Renew Modal -->
+<div class="modal fade" id="renewModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <form method="post" action="{{ url_for('renew', ticket_id=ticket.id) }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h5 class="modal-title"><i class="bi bi-arrow-clockwise text-amber me-2"></i>續當</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">續當日期（先收利息至此日）</label>
+            <input type="date" name="calc_date" class="form-control" value="{{ today }}" id="renewDate">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">續當期數</label>
+            <select name="new_months" class="form-select" id="renewMonths">
+              <option value="1">1 個月</option>
+              <option value="2">2 個月</option>
+              <option value="3" selected>3 個月</option>
+              <option value="6">6 個月</option>
+            </select>
+          </div>
+          <div class="calc-result">
+            <div class="calc-row">
+              <span class="text-muted">本次應收利息</span>
+              <span id="rn_interest" class="text-amber">—</span>
+            </div>
+            <div class="calc-row">
+              <span class="text-muted">新到期日</span>
+              <span id="rn_due" class="text-green">—</span>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label">備註</label>
+            <input type="text" name="notes" class="form-control" placeholder="選填">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-warning">確認續當</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Forfeit Modal -->
+<div class="modal fade" id="forfeitModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <form method="post" action="{{ url_for('forfeit', ticket_id=ticket.id) }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h5 class="modal-title"><i class="bi bi-x-circle text-red me-2"></i>確認流當</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert" style="background:rgba(239,68,68,.15); border-color:rgba(239,68,68,.3); color:#fca5a5">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            標記流當後，此物品視為店家所有，此操作無法復原。
+          </div>
+          <div>
+            <label class="form-label">備註</label>
+            <input type="text" name="notes" class="form-control" placeholder="選填">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-danger">確認流當</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if ticket.status == 'active' %}
+<script>
+const TICKET_ID = {{ ticket.id }};
+
+function fmt(n) {
+  return Number(n).toLocaleString('zh-TW', {maximumFractionDigits: 0}) + ' 元';
+}
+
+async function fetchInterest(date, newMonths = 3) {
+  const res = await fetch(`/api/interest/${TICKET_ID}?date=${date}&new_months=${newMonths}`);
+  return await res.json();
+}
+
+// Main calculator
+async function updateCalc() {
+  const d = document.getElementById('calcDate').value;
+  if (!d) return;
+  const data = await fetchInterest(d);
+  document.getElementById('r_principal').textContent = fmt(data.principal);
+  document.getElementById('r_months').textContent = data.months + ' 個月';
+  document.getElementById('r_interest').textContent = fmt(data.interest);
+  document.getElementById('r_total').textContent = fmt(data.total);
+}
+document.getElementById('calcDate').addEventListener('change', updateCalc);
+updateCalc();
+
+// Redeem modal
+async function updateRedeem() {
+  const d = document.getElementById('redeemDate').value;
+  if (!d) return;
+  const data = await fetchInterest(d);
+  document.getElementById('m_interest').textContent = fmt(data.interest);
+  document.getElementById('m_total').textContent = fmt(data.total);
+}
+document.getElementById('redeemDate').addEventListener('change', updateRedeem);
+document.getElementById('redeemModal').addEventListener('shown.bs.modal', updateRedeem);
+
+// Renew modal
+async function updateRenew() {
+  const d = document.getElementById('renewDate').value;
+  const m = document.getElementById('renewMonths').value;
+  if (!d) return;
+  const data = await fetchInterest(d, m);
+  document.getElementById('rn_interest').textContent = fmt(data.interest);
+  document.getElementById('rn_due').textContent = data.new_due;
+}
+document.getElementById('renewDate').addEventListener('change', updateRenew);
+document.getElementById('renewMonths').addEventListener('change', updateRenew);
+document.getElementById('renewModal').addEventListener('shown.bs.modal', updateRenew);
+</script>
+{% endif %}
+{% endblock %}

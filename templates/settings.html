@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}系統設定{% endblock %}
+{% block page_title %}系統設定{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-7">
+    <form method="post">
+
+      <!-- Basic settings -->
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-shop me-1"></i>店家資訊</div>
+        <div class="row g-3">
+          <div class="col-sm-7">
+            <label class="form-label">系統名稱</label>
+            <input type="text" name="shop_name" class="form-control"
+                   value="{{ cfg.shop_name }}">
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label">當票流水號前綴</label>
+            <input type="text" name="ticket_prefix" class="form-control"
+                   value="{{ cfg.ticket_prefix }}" maxlength="3">
+          </div>
+        </div>
+      </div>
+
+      <!-- Default rate settings -->
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-percent me-1"></i>預設利率設定</div>
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <label class="form-label">預設月利率（%）</label>
+            <input type="number" name="default_rate" class="form-control"
+                   value="{{ cfg.default_rate }}" step="0.1" min="0.1">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">預設典當期限（月）</label>
+            <select name="default_months" class="form-select">
+              {% for m in [1,2,3,4,6,12] %}
+              <option value="{{ m }}" {% if cfg.default_months == m|string %}selected{% endif %}>{{ m }} 個月</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="section-title mt-2"><i class="bi bi-tags me-1"></i>各分類預設利率</div>
+        <div class="row g-2">
+          {% for cat in categories %}
+          <div class="col-sm-6">
+            <div class="d-flex gap-2 align-items-center p-2" style="background:var(--bg-base); border-radius:8px; border:1px solid var(--border)">
+              <input type="text" name="cat_name_{{ cat.id }}" class="form-control form-control-sm"
+                     value="{{ cat.name }}" style="flex:1">
+              <div class="d-flex align-items-center gap-1" style="flex-shrink:0">
+                <input type="number" name="cat_rate_{{ cat.id }}" class="form-control form-control-sm"
+                       value="{{ cat.default_rate }}" step="0.1" min="0.1" style="width:70px">
+                <span class="text-muted" style="font-size:.83rem">%</span>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-check-lg me-1"></i>儲存設定
+      </button>
+    </form>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <div class="section-title"><i class="bi bi-info-circle me-1"></i>系統資訊</div>
+      <div class="row g-2" style="font-size:.88rem">
+        <div class="col-5 text-muted">版本</div>
+        <div class="col-7">v1.0.0</div>
+        <div class="col-5 text-muted">資料庫位置</div>
+        <div class="col-7 text-muted" style="font-size:.78rem; word-break:break-all">pawnshop.db（同目錄）</div>
+        <div class="col-5 text-muted">備份建議</div>
+        <div class="col-7 text-muted" style="font-size:.78rem">定期複製 pawnshop.db 到其他位置</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

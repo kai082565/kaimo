@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}儀表板 — 當鋪管理系統{% endblock %}
+{% block page_title %}儀表板{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('new_ticket') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>開新當票
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats row -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="stat-card">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon blue"><i class="bi bi-ticket-perforated"></i></div>
+        <div>
+          <div class="stat-value">{{ stats.active_count }}</div>
+          <div class="stat-label">當票中</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
+        <div>
+          <div class="stat-value">{{ "{:,.0f}".format(stats.total_principal) }}</div>
+          <div class="stat-label">放款總額（元）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon amber"><i class="bi bi-coin"></i></div>
+        <div>
+          <div class="stat-value">{{ "{:,.0f}".format(stats.month_interest) }}</div>
+          <div class="stat-label">本月利息收入（元）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon red"><i class="bi bi-exclamation-triangle"></i></div>
+        <div>
+          <div class="stat-value {% if stats.overdue > 0 %}text-red{% endif %}">{{ stats.overdue }}</div>
+          <div class="stat-label">逾期未贖</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Due soon -->
+  <div class="col-lg-7">
+    <div class="section-title"><i class="bi bi-bell me-1"></i>即將到期 / 逾期（14天內）</div>
+    {% if due_soon %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>當票號碼</th>
+              <th>客戶</th>
+              <th>物品</th>
+              <th>本金</th>
+              <th>目前利息</th>
+              <th>到期日</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for t in due_soon %}
+            <tr>
+              <td>
+                <a href="{{ url_for('ticket_detail', ticket_id=t.id) }}" class="fw-semibold">
+                  {{ t.ticket_no }}
+                </a>
+              </td>
+              <td>{{ t.customer_name or '—' }}</td>
+              <td class="text-muted">{{ t.item_name }}</td>
+              <td>{{ "{:,.0f}".format(t.principal) }}</td>
+              <td class="text-amber">{{ "{:,.0f}".format(t.interest) }}</td>
+              <td>
+                {% if t.is_overdue %}
+                  <span class="status-badge badge-overdue">{{ t.due_date }} ⚠ 逾期</span>
+                {% else %}
+                  <span class="text-amber">{{ t.due_date }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('ticket_detail', ticket_id=t.id) }}"
+                   class="btn btn-outline-secondary btn-sm py-0 px-2">處理</a>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="empty-state">
+        <i class="bi bi-check2-circle text-green"></i>
+        <div>目前沒有即將到期的當票</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent activity -->
+  <div class="col-lg-5">
+    <div class="section-title"><i class="bi bi-clock-history me-1"></i>最近操作紀錄</div>
+    <div class="card p-3">
+      {% if recent %}
+      <ul class="timeline">
+        {% for h in recent %}
+        <li class="timeline-item">
+          <div class="timeline-dot
+            {% if h.action=='created' %}bg-primary bg-opacity-25{% elif h.action=='redeemed' %}bg-success bg-opacity-25{% elif h.action=='renewed' %}bg-warning bg-opacity-25{% else %}bg-danger bg-opacity-25{% endif %}">
+            <i class="bi bi-{% if h.action=='created' %}plus{% elif h.action=='redeemed' %}check-lg{% elif h.action=='renewed' %}arrow-clockwise{% else %}slash-circle{% endif %}
+              {% if h.action=='created' %}text-blue{% elif h.action=='redeemed' %}text-green{% elif h.action=='renewed' %}text-amber{% else %}text-red{% endif %}"></i>
+          </div>
+          <div class="timeline-body">
+            <div class="d-flex justify-content-between">
+              <span class="fw-semibold" style="font-size:.88rem">
+                <a href="{{ url_for('ticket_detail', ticket_id=h.ticket_id) }}">{{ h.ticket_no }}</a>
+                —
+                {% if h.action=='created' %}開立{% elif h.action=='redeemed' %}贖回{% elif h.action=='renewed' %}續當{% else %}流當{% endif %}
+              </span>
+              <span class="text-muted" style="font-size:.75rem">{{ h.action_date[:16] }}</span>
+            </div>
+            <div style="font-size:.8rem; color:var(--text-muted)">
+              {{ h.customer_name or '—' }}
+              {% if h.total_amount %}· 收 {{ "{:,.0f}".format(h.total_amount) }} 元{% endif %}
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state py-3">
+        <i class="bi bi-inbox"></i>
+        <div>暫無紀錄</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

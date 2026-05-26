@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}{{ customer.name }} — 客戶詳情{% endblock %}
+{% block page_title %}客戶詳情{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('edit_customer', customer_id=customer.id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-pencil me-1"></i>編輯
+  </a>
+  <a href="{{ url_for('customers') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>返回
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Customer info -->
+<div class="card p-4 mb-4">
+  <div class="row g-3 align-items-center">
+    <div class="col-auto">
+      <div class="stat-icon blue" style="width:52px;height:52px;font-size:1.5rem">
+        <i class="bi bi-person"></i>
+      </div>
+    </div>
+    <div class="col">
+      <div class="fw-bold" style="font-size:1.2rem">{{ customer.name }}</div>
+      <div class="d-flex flex-wrap gap-3 mt-1" style="font-size:.85rem; color:var(--text-muted)">
+        {% if customer.phone %}<span><i class="bi bi-telephone me-1"></i>{{ customer.phone }}</span>{% endif %}
+        {% if customer.id_card %}<span><i class="bi bi-credit-card me-1"></i>{{ customer.id_card }}</span>{% endif %}
+        {% if customer.address %}<span><i class="bi bi-geo-alt me-1"></i>{{ customer.address }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tickets + payment schedules -->
+{% if customer.tickets %}
+  {% for t in customer.tickets %}
+  <div class="card mb-4">
+
+    <!-- Ticket header -->
+    <div class="p-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
+         style="border-bottom:1px solid var(--border)">
+      <div class="d-flex align-items-center gap-3">
+        <span class="fw-bold" style="font-size:1.05rem; letter-spacing:.04em">{{ t.ticket_no }}</span>
+        <span class="text-muted" style="font-size:.85rem">{{ t.item_name }}</span>
+        <span class="text-muted" style="font-size:.82rem">
+          本金 <span class="text-blue fw-semibold">{{ "{:,.0f}".format(t.principal) }}</span> 元
+          · {{ t.monthly_rate }}%/月
+        </span>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        {% if t.status == 'active' %}
+          <span class="status-badge badge-active">當中</span>
+          <button class="btn btn-success btn-sm" onclick="openRepay({{ t.id }}, '{{ t.ticket_no }}', {{ t.principal }})">
+            <i class="bi bi-arrow-down-circle me-1"></i>回本
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="openSettle({{ t.id }}, '{{ t.ticket_no }}')">
+            <i class="bi bi-check2-circle me-1"></i>結清
+          </button>
+        {% elif t.status == 'redeemed' %}
+          <span class="status-badge badge-redeemed">已贖回</span>
+        {% else %}
+          <span class="status-badge badge-forfeited">已流當</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Payment schedule -->
+    {% if t.schedule %}
+    <div>
+      <div class="px-3 pt-3 pb-1 d-flex align-items-center justify-content-between">
+        <span class="section-title mb-0">繳款明細</span>
+        <span class="text-muted" style="font-size:.78rem">到期日 {{ t.due_date }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" style="white-space:nowrap">
+          <thead>
+            <tr>
+              <th>應繳日期</th>
+              <th>期數</th>
+              <th style="text-align:right">本金餘額</th>
+              <th style="text-align:right">已繳金額</th>
+              <th style="text-align:right">利息</th>
+              <th style="text-align:right">滯納金</th>
+              <th style="text-align:right">回本</th>
+              <th style="text-align:right">剩餘金額</th>
+              <th>狀態</th>
+              {% if t.status == 'active' %}<th>操作</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for p in t.schedule %}
+            <tr {% if p.is_overdue %}style="background:rgba(239,68,68,.06)"{% endif %}>
+              <td>
+                {% if p.is_overdue %}
+                  <span class="text-red fw-semibold">{{ p.due_date }}</span>
+                  <span class="text-red" style="font-size:.75rem">（逾期 {{ p.overdue_days }} 天）</span>
+                {% else %}
+                  {{ p.due_date }}
+                {% endif %}
+              </td>
+              <td class="fw-semibold">第 {{ p.period_no }} 期</td>
+              <td style="text-align:right">${{ "{:,.0f}".format(p.principal_balance) }}</td>
+              <td style="text-align:right">
+                <span class="text-green">${{ "{:,.0f}".format(p.paid_amount) }}</span>
+              </td>
+              <td style="text-align:right">${{ "{:,.0f}".format(p.interest) }}</td>
+              <td style="text-align:right">
+                {% if p.late_fee > 0 %}
+                  <span class="text-red">${{ "{:,.0f}".format(p.late_fee) }}</span>
+                {% else %}$0{% endif %}
+              </td>
+              <td style="text-align:right">
+                {% if p.paid_principal > 0 %}
+                  <span class="text-blue">${{ "{:,.0f}".format(p.paid_principal) }}</span>
+                {% else %}$0{% endif %}
+              </td>
+              <td style="text-align:right">
+                {% if p.remaining > 0 %}
+                  <span class="text-amber fw-semibold">${{ "{:,.0f}".format(p.remaining) }}</span>
+                {% else %}
+                  <span class="text-green">$0</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if p.status == 'paid' %}
+                  <span class="status-badge badge-redeemed">已付款</span>
+                {% elif p.is_overdue %}
+                  <span class="status-badge badge-overdue">逾期</span>
+                {% else %}
+                  <span class="status-badge badge-forfeited" style="background:rgba(245,158,11,.2);color:#fbbf24;border-color:rgba(245,158,11,.35)">待付款</span>
+                {% endif %}
+              </td>
+              {% if t.status == 'active' %}
+              <td>
+                {% if p.status != 'paid' %}
+                <button class="btn btn-primary btn-sm py-0 px-2"
+                        onclick="openPayModal({{ t.id }}, {{ p.id }}, {{ p.period_no }},
+                                 {{ p.interest }}, {{ p.late_fee }}, {{ p.paid_amount }})">
+                  記錄付款
+                </button>
+                {% endif %}
+              </td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <i class="bi bi-ticket-perforated"></i>
+    <div>此客戶尚無當票紀錄</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 記錄付款 Modal -->
+<div class="modal fade" id="payModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <div class="modal-header" style="border-color:var(--border)">
+        <h5 class="modal-title"><i class="bi bi-cash me-2 text-green"></i>記錄付款 — <span id="payModalPeriod"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="calc-result mb-3">
+          <div class="calc-row">
+            <span class="text-muted">應繳利息</span>
+            <span id="payModalInterest">—</span>
+          </div>
+          <div class="calc-row total">
+            <span>尚欠金額</span>
+            <span id="payModalRemaining" class="text-amber">—</span>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label">繳利息金額（元）</label>
+            <input type="number" id="payAmount" class="form-control" placeholder="0" min="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">回本金額（元）</label>
+            <input type="number" id="payPrincipal" class="form-control" placeholder="0" min="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">滯納金（元）</label>
+            <input type="number" id="payLateFee" class="form-control" placeholder="0" min="0">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">備註</label>
+            <input type="text" id="payNotes" class="form-control" placeholder="選填">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="border-color:var(--border)">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-success" onclick="submitPayment()">確認付款</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 回本 Modal -->
+<div class="modal fade" id="repayModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <div class="modal-header" style="border-color:var(--border)">
+        <h5 class="modal-title"><i class="bi bi-arrow-down-circle text-green me-2"></i>回本 — <span id="repayTicketNo"></span></h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="calc-result mb-3">
+          <div class="calc-row">
+            <span class="text-muted">原始本金</span>
+            <span id="repayPrincipal">—</span>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">回本金額（元）</label>
+          <input type="number" id="repayAmount" class="form-control" placeholder="輸入要償還的本金金額" min="1">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">備註</label>
+          <input type="text" id="repayNotes" class="form-control" placeholder="選填">
+        </div>
+        <div class="text-muted" style="font-size:.82rem">
+          <i class="bi bi-info-circle me-1"></i>回本後，後續各期的利息將依剩餘本金自動重新計算。
+        </div>
+      </div>
+      <div class="modal-footer" style="border-color:var(--border)">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-success" onclick="submitRepay()">確認回本</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 結清確認 Modal -->
+<div class="modal fade" id="settleModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background:var(--bg-card); border-color:var(--border)">
+      <div class="modal-header" style="border-color:var(--border)">
+        <h5 class="modal-title"><i class="bi bi-check2-circle text-green me-2"></i>確認結清</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>確定將當票 <strong id="settleTicketNo"></strong> 標記為結清？</p>
+        <p class="text-muted" style="font-size:.85rem">所有未付期數將標記為已付，當票狀態改為已贖回。</p>
+      </div>
+      <div class="modal-footer" style="border-color:var(--border)">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-success" onclick="submitSettle()">確認結清</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _payTicketId = null, _payScheduleId = null;
+let _settleTicketId = null;
+let _repayTicketId = null;
+
+function fmt(n) {
+  return '$' + Number(n).toLocaleString('zh-TW', {maximumFractionDigits: 0});
+}
+
+function openPayModal(ticketId, scheduleId, periodNo, interest, lateFee, paidAmount) {
+  _payTicketId   = ticketId;
+  _payScheduleId = scheduleId;
+  const remaining = Math.max(0, interest + lateFee - paidAmount);
+  document.getElementById('payModalPeriod').textContent    = '第 ' + periodNo + ' 期';
+  document.getElementById('payModalInterest').textContent  = fmt(interest);
+  document.getElementById('payModalRemaining').textContent = fmt(remaining);
+  document.getElementById('payAmount').value    = remaining > 0 ? remaining : '';
+  document.getElementById('payPrincipal').value = '';
+  document.getElementById('payLateFee').value   = '';
+  document.getElementById('payNotes').value     = '';
+  new bootstrap.Modal(document.getElementById('payModal')).show();
+}
+
+function submitPayment() {
+  const body = {
+    paid_amount:    parseFloat(document.getElementById('payAmount').value)    || 0,
+    paid_principal: parseFloat(document.getElementById('payPrincipal').value) || 0,
+    late_fee:       parseFloat(document.getElementById('payLateFee').value)   || 0,
+    notes:          document.getElementById('payNotes').value,
+  };
+  fetch('/tickets/' + _payTicketId + '/pay_period/' + _payScheduleId, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  }).then(() => location.reload());
+}
+
+function openRepay(ticketId, ticketNo, principal) {
+  _repayTicketId = ticketId;
+  document.getElementById('repayTicketNo').textContent  = ticketNo;
+  document.getElementById('repayPrincipal').textContent = fmt(principal);
+  document.getElementById('repayAmount').value = '';
+  document.getElementById('repayNotes').value  = '';
+  new bootstrap.Modal(document.getElementById('repayModal')).show();
+}
+
+function submitRepay() {
+  const amount = parseFloat(document.getElementById('repayAmount').value) || 0;
+  if (amount <= 0) { alert('請輸入回本金額'); return; }
+  fetch('/tickets/' + _repayTicketId + '/repay', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ amount, notes: document.getElementById('repayNotes').value }),
+  }).then(() => location.reload());
+}
+
+function openSettle(ticketId, ticketNo) {
+  _settleTicketId = ticketId;
+  document.getElementById('settleTicketNo').textContent = ticketNo;
+  new bootstrap.Modal(document.getElementById('settleModal')).show();
+}
+
+function submitSettle() {
+  fetch('/tickets/' + _settleTicketId + '/settle', { method: 'POST' })
+    .then(() => location.reload());
+}
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title or '當票管理' }}{% endblock %}
+{% block page_title %}{{ page_title or '當票管理' }}{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('new_ticket') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>開新當票
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filter bar -->
+<div class="card mb-3 p-3">
+  <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+    <input type="text" name="q" class="form-control form-control-sm" style="width:220px"
+           placeholder="搜尋當票號碼、客戶、物品…" value="{{ search }}">
+    <select name="status" class="form-select form-select-sm" style="width:130px">
+      <option value="">全部狀態</option>
+      <option value="active"    {% if status_filter=='active' %}selected{% endif %}>當中</option>
+      <option value="redeemed"  {% if status_filter=='redeemed' %}selected{% endif %}>已贖回</option>
+      <option value="forfeited" {% if status_filter=='forfeited' %}selected{% endif %}>已流當</option>
+    </select>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-search"></i> 搜尋
+    </button>
+    {% if search or status_filter %}
+    <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm">清除</a>
+    {% endif %}
+    <span class="ms-auto text-muted" style="font-size:.82rem">共 {{ tickets|length }} 筆</span>
+  </form>
+</div>
+
+{% if tickets %}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" style="white-space:nowrap">
+      <thead>
+        <tr>
+          <th>編號</th>
+          <th>客戶</th>
+          <th>起始日</th>
+          <th>物品</th>
+          <th>票面</th>
+          <th>應繳日期</th>
+          <th>利息</th>
+          <th>滯納金</th>
+          <th>回本</th>
+          <th>剩餘金額</th>
+          <th>到期日</th>
+          <th>狀態</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for t in tickets %}
+        <tr>
+          <td>
+            <a href="{{ url_for('ticket_detail', ticket_id=t.id) }}" class="fw-semibold">
+              {{ t.ticket_no }}
+            </a>
+          </td>
+          <td>{{ t.customer_name or '<span class="text-muted">—</span>'|safe }}</td>
+          <td class="text-muted">{{ t.pawn_date }}</td>
+          <td>{{ t.item_name }}</td>
+          <td>{{ "{:,.0f}".format(t.principal) }}</td>
+          <td>
+            {% if t.next_due_date %}
+              {% if t.next_due_overdue %}
+                <span class="text-red fw-semibold">{{ t.next_due_date }}</span>
+                <span class="text-red" style="font-size:.75rem">逾期</span>
+              {% else %}
+                <span class="text-amber">{{ t.next_due_date }}</span>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.next_interest > 0 %}
+              <span class="text-amber">{{ "{:,.0f}".format(t.next_interest) }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.next_late_fee > 0 %}
+              <span class="text-red">{{ "{:,.0f}".format(t.next_late_fee) }}</span>
+            {% else %}
+              <span class="text-muted">0</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.total_repaid > 0 %}
+              <span class="text-blue fw-semibold">{{ "{:,.0f}".format(t.total_repaid) }}</span>
+            {% else %}
+              <span class="text-muted">0</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="fw-semibold text-green">{{ "{:,.0f}".format(t.principal - t.total_repaid) }}</span>
+          </td>
+          <td>{{ t.due_date }}</td>
+          <td>
+            {% if t.is_overdue %}
+              <span class="status-badge badge-overdue">逾期</span>
+            {% elif t.status == 'active' %}
+              <span class="status-badge badge-active">當中</span>
+            {% elif t.status == 'redeemed' %}
+              <span class="status-badge badge-redeemed">已贖回</span>
+            {% else %}
+              <span class="status-badge badge-forfeited">已流當</span>
+            {% endif %}
+          </td>
+          <td>
+            <button type="button"
+                    class="btn btn-outline-danger btn-sm py-0 px-2"
+                    onclick="deleteTicket({{ t.id }}, '{{ t.ticket_no }}')">刪除</button>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <i class="bi bi-ticket-perforated"></i>
+    <div class="mb-2">沒有符合條件的當票</div>
+    <a href="{{ url_for('new_ticket') }}" class="btn btn-primary btn-sm">開新當票</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function deleteTicket(id, no) {
+  if (!confirm('確定刪除當票「' + no + '」？此操作無法復原。')) return;
+  fetch('/tickets/' + id + '/delete', { method: 'POST' })
+    .then(() => window.location.href = '/tickets');
+}
+</script>
+{% endblock %}
