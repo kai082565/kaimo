@@ -3,6 +3,9 @@
 {% block page_title %}當票詳情{% endblock %}
 
 {% block topbar_actions %}
+  <a href="{{ url_for('edit_ticket', ticket_id=ticket.id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-pencil me-1"></i>編輯
+  </a>
   <a href="{{ url_for('tickets') }}" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-arrow-left me-1"></i>返回列表
   </a>

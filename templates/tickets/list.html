@@ -33,19 +33,35 @@
 
 {% if tickets %}
 <div class="card">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover mb-0"
+           style="table-layout:fixed; width:100%">
+      <colgroup>
+        <col style="width:9%">  <!-- 編號 -->
+        <col style="width:7%">  <!-- 客戶 -->
+        <col style="width:8%">  <!-- 起始日 -->
+        <col style="width:9%">  <!-- 物品 -->
+        <col style="width:7%">  <!-- 本金 -->
+        <col style="width:7%">  <!-- 回本 -->
+        <col style="width:8%">  <!-- 剩餘金額 -->
+        <col style="width:7%">  <!-- 利息 -->
+        <col style="width:9%">  <!-- 應繳日期 -->
+        <col style="width:7%">  <!-- 滯納金 -->
+        <col style="width:9%">  <!-- 到期日 -->
+        <col style="width:8%">  <!-- 狀態 -->
+        <col style="width:5%">  <!-- 刪除 -->
+      </colgroup>
       <thead>
         <tr>
           <th>編號</th>
           <th>客戶</th>
           <th>起始日</th>
           <th>物品</th>
-          <th>票面</th>
+          <th style="text-align:right">本金</th>
+          <th style="text-align:right">回本</th>
+          <th style="text-align:right">剩餘金額</th>
+          <th style="text-align:right">利息</th>
           <th>應繳日期</th>
-          <th>利息</th>
-          <th>滯納金</th>
-          <th>回本</th>
-          <th>剩餘金額</th>
+          <th style="text-align:right">滯納金</th>
           <th>到期日</th>
           <th>狀態</th>
           <th></th>
@@ -62,7 +78,24 @@
           <td>{{ t.customer_name or '<span class="text-muted">—</span>'|safe }}</td>
           <td class="text-muted">{{ t.pawn_date }}</td>
           <td>{{ t.item_name }}</td>
-          <td>{{ "{:,.0f}".format(t.principal) }}</td>
+          <td style="text-align:right">{{ "{:,.0f}".format(t.next_principal_balance) }}</td>
+          <td style="text-align:right">
+            {% if t.next_paid_principal > 0 %}
+              <span class="text-cyan fw-semibold">{{ "{:,.0f}".format(t.next_paid_principal) }}</span>
+            {% else %}
+              <span class="text-muted">0</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right">
+            <span class="fw-semibold text-green">{{ "{:,.0f}".format(t.next_principal_balance - t.next_paid_principal) }}</span>
+          </td>
+          <td style="text-align:right">
+            {% if t.next_interest > 0 %}
+              <span class="text-amber">{{ "{:,.0f}".format(t.next_interest) }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
           <td>
             {% if t.next_due_date %}
               {% if t.next_due_overdue %}
@@ -75,29 +108,12 @@
               <span class="text-muted">—</span>
             {% endif %}
           </td>
-          <td>
-            {% if t.next_interest > 0 %}
-              <span class="text-amber">{{ "{:,.0f}".format(t.next_interest) }}</span>
-            {% else %}
-              <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-          <td>
+          <td style="text-align:right">
             {% if t.next_late_fee > 0 %}
               <span class="text-red">{{ "{:,.0f}".format(t.next_late_fee) }}</span>
             {% else %}
-              <span class="text-muted">0</span>
+              <span class="text-muted">—</span>
             {% endif %}
-          </td>
-          <td>
-            {% if t.total_repaid > 0 %}
-              <span class="text-blue fw-semibold">{{ "{:,.0f}".format(t.total_repaid) }}</span>
-            {% else %}
-              <span class="text-muted">0</span>
-            {% endif %}
-          </td>
-          <td>
-            <span class="fw-semibold text-green">{{ "{:,.0f}".format(t.principal - t.total_repaid) }}</span>
           </td>
           <td>{{ t.due_date }}</td>
           <td>

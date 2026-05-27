@@ -116,6 +116,25 @@ def ticket_detail(ticket_id):
                            today=_today())
 
 
+@app.route("/tickets/<int:ticket_id>/edit", methods=["GET", "POST"])
+def edit_ticket(ticket_id):
+    ticket = db.get_ticket(ticket_id)
+    if not ticket:
+        flash("找不到該當票", "danger")
+        return redirect(url_for("tickets"))
+    if request.method == "POST":
+        db.update_ticket(ticket_id, request.form.to_dict())
+        flash("當票資料已更新！", "success")
+        return redirect(url_for("ticket_detail", ticket_id=ticket_id))
+    categories = db.get_categories()
+    customer = db.get_customer(ticket["customer_id"]) if ticket.get("customer_id") else None
+    return render_template("tickets/edit.html",
+                           ticket=ticket,
+                           customer=customer,
+                           categories=categories,
+                           today=_today())
+
+
 @app.route("/tickets/<int:ticket_id>/redeem", methods=["POST"])
 def redeem(ticket_id):
     calc_date = request.form.get("calc_date") or _today()
@@ -165,13 +184,26 @@ def pay_period(ticket_id, schedule_id):
 @app.route("/tickets/<int:ticket_id>/repay", methods=["POST"])
 def repay_principal(ticket_id):
     data = request.get_json() or {}
-    db.repay_principal(ticket_id, float(data.get("amount", 0)), data.get("notes", ""))
+    schedule_id = int(data["schedule_id"]) if data.get("schedule_id") else None
+    db.repay_principal(ticket_id, float(data.get("amount", 0)), data.get("notes", ""), schedule_id)
     return jsonify({"ok": True})
 
 
 @app.route("/tickets/<int:ticket_id>/settle", methods=["POST"])
 def settle_schedule(ticket_id):
     db.settle_ticket_schedule(ticket_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/tickets/<int:ticket_id>/cancel_payment/<int:schedule_id>", methods=["POST"])
+def cancel_payment(ticket_id, schedule_id):
+    db.cancel_period_payment(schedule_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/tickets/<int:ticket_id>/cancel_repayment/<int:schedule_id>", methods=["POST"])
+def cancel_repayment(ticket_id, schedule_id):
+    db.cancel_period_repayment(schedule_id)
     return jsonify({"ok": True})
 
 

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}編輯當票 {{ ticket.ticket_no }}{% endblock %}
+{% block page_title %}編輯當票{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i>返回詳情
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <form method="post">
+
+      <!-- 客戶資料 -->
+      {% if customer %}
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-person me-1"></i>客戶資料</div>
+        <div class="row g-3">
+          <div class="col-sm-4">
+            <label class="form-label">姓名 <span class="text-red">*</span></label>
+            <input type="text" name="customer_name" class="form-control"
+                   value="{{ customer.name }}" required>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">身分證號</label>
+            <input type="text" name="customer_id_card" class="form-control"
+                   value="{{ customer.id_card or '' }}">
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">電話</label>
+            <input type="text" name="customer_phone" class="form-control"
+                   value="{{ customer.phone or '' }}">
+          </div>
+          <div class="col-12">
+            <label class="form-label">地址</label>
+            <input type="text" name="customer_address" class="form-control"
+                   value="{{ customer.address or '' }}">
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- 物品資料 -->
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-box-seam me-1"></i>典當物品</div>
+        <div class="row g-3">
+          <div class="col-sm-8">
+            <label class="form-label">物品名稱 <span class="text-red">*</span></label>
+            <input type="text" name="item_name" class="form-control"
+                   value="{{ ticket.item_name }}" required>
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label">分類</label>
+            <select name="category_id" class="form-select">
+              <option value="">— 請選擇 —</option>
+              {% for cat in categories %}
+              <option value="{{ cat.id }}"
+                {% if cat.id == ticket.category_id %}selected{% endif %}>
+                {{ cat.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">物品描述</label>
+            <textarea name="item_description" class="form-control" rows="2">{{ ticket.item_description or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 貸款資訊 -->
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-calculator me-1"></i>貸款資訊</div>
+        <div class="row g-3">
+          <div class="col-sm-4">
+            <label class="form-label">典當金額（元）<span class="text-red">*</span></label>
+            <input type="number" name="principal" id="principal" class="form-control"
+                   value="{{ ticket.principal|int }}" min="1" required>
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label">月利率（%）<span class="text-red">*</span></label>
+            <input type="number" name="monthly_rate" id="monthlyRate" class="form-control"
+                   value="{{ ticket.monthly_rate }}" step="0.1" min="0.1" required>
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label">典當日期</label>
+            <input type="date" name="pawn_date" id="pawnDate" class="form-control"
+                   value="{{ ticket.pawn_date }}" required>
+          </div>
+          <div class="col-sm-5">
+            <label class="form-label">到期日</label>
+            <input type="date" name="due_date" class="form-control"
+                   value="{{ ticket.due_date }}" required>
+          </div>
+        </div>
+
+        <!-- 即時預覽 -->
+        <div class="calc-result mt-4">
+          <div class="calc-row">
+            <span class="text-muted">典當金額</span>
+            <span id="prevPrincipal">—</span>
+          </div>
+          <div class="calc-row">
+            <span class="text-muted">月利率</span>
+            <span id="prevRate">—</span>
+          </div>
+          <div class="calc-row">
+            <span class="text-muted">每月利息</span>
+            <span id="prevInterest" class="text-amber">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 備註 -->
+      <div class="card p-4 mb-4">
+        <label class="form-label section-title"><i class="bi bi-pencil me-1"></i>備註</label>
+        <textarea name="notes" class="form-control" rows="2">{{ ticket.notes or '' }}</textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary px-4">
+          <i class="bi bi-check-lg me-1"></i>儲存變更
+        </button>
+        <a href="{{ url_for('ticket_detail', ticket_id=ticket.id) }}"
+           class="btn btn-outline-secondary">取消</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- 右側提示 -->
+  <div class="col-lg-5">
+    <div class="card p-4">
+      <div class="section-title"><i class="bi bi-info-circle me-1"></i>注意事項</div>
+      <div style="font-size:.92rem; color:var(--text-sub); line-height:1.8">
+        <p class="mb-2">修改 <strong class="text-main">典當金額</strong> 或 <strong class="text-main">月利率</strong>
+          後，系統將自動重新計算所有<span class="text-amber">未付期數</span>的利息。</p>
+        <p class="mb-2">已付清的期數不受影響。</p>
+        <p class="mb-0 text-muted">修改典當日期與到期日不會變更各期的應繳日期，如需調整請至客戶詳情頁面操作。</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function fmt(n) {
+  return Number(n).toLocaleString('zh-TW', {maximumFractionDigits: 0}) + ' 元';
+}
+
+function updatePreview() {
+  const p = parseFloat(document.getElementById('principal').value) || 0;
+  const r = parseFloat(document.getElementById('monthlyRate').value) || 0;
+  document.getElementById('prevPrincipal').textContent = p ? fmt(p) : '—';
+  document.getElementById('prevRate').textContent = r ? r + ' %' : '—';
+  if (p && r) {
+    document.getElementById('prevInterest').textContent = fmt(Math.round(p * (r / 100)));
+  } else {
+    document.getElementById('prevInterest').textContent = '—';
+  }
+}
+
+['principal', 'monthlyRate'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updatePreview);
+});
+updatePreview();
+</script>
+{% endblock %}

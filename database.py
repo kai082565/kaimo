@@ -269,32 +269,32 @@ def list_tickets(status=None, search=None):
 
 
 def _enrich_ticket(d, conn, today):
-    """將 next_due_date / interest / late_fee / total_repaid 附加到 ticket dict"""
+    """將 next_due_date / interest / late_fee / paid_principal / principal_balance 附加到 ticket dict"""
     if d["status"] == "active":
         nxt = conn.execute(
-            """SELECT due_date, interest, late_fee FROM payment_schedule
+            """SELECT due_date, interest, late_fee, paid_principal, principal_balance
+               FROM payment_schedule
                WHERE ticket_id=? AND status='pending'
                ORDER BY period_no LIMIT 1""",
             (d["id"],)
         ).fetchone()
-        d["next_due_date"]    = nxt["due_date"]  if nxt else None
-        d["next_interest"]    = nxt["interest"]  if nxt else 0
-        d["next_late_fee"]    = nxt["late_fee"]  if nxt else 0
-        d["next_due_overdue"] = bool(d["next_due_date"] and d["next_due_date"] < today)
+        d["next_due_date"]          = nxt["due_date"]          if nxt else None
+        d["next_interest"]          = nxt["interest"]          if nxt else 0
+        d["next_late_fee"]          = nxt["late_fee"]          if nxt else 0
+        d["next_paid_principal"]    = nxt["paid_principal"]    if nxt else 0
+        d["next_principal_balance"] = nxt["principal_balance"] if nxt else d["principal"]
+        d["next_due_overdue"]       = bool(d["next_due_date"] and d["next_due_date"] < today)
     else:
         d["next_due_date"] = d["next_interest"] = d["next_late_fee"] = None
         d["next_due_overdue"] = False
-    repaid = conn.execute(
-        "SELECT COALESCE(SUM(paid_principal),0) FROM payment_schedule WHERE ticket_id=?",
-        (d["id"],)
-    ).fetchone()[0]
-    d["total_repaid"] = repaid
+        d["next_paid_principal"]    = 0
+        d["next_principal_balance"] = d["principal"]
     d["is_overdue"] = d["status"] == "active" and d["due_date"] < today
     return d
 
 
 def list_tickets_monthly():
-    """當月應收：最近一期未付的應繳日期在本月"""
+    """當月應收：有任一未付期數的應繳日期在本月，顯示本月那一期的資料"""
     ym = date.today().strftime("%Y-%m")
     today = date.today().isoformat()
     sql = """
@@ -304,20 +304,34 @@ def list_tickets_monthly():
         LEFT JOIN categories cat ON t.category_id=cat.id
         WHERE t.status='active'
           AND t.id IN (
-              SELECT ticket_id FROM payment_schedule
+              SELECT DISTINCT ticket_id FROM payment_schedule
               WHERE status='pending'
                 AND strftime('%Y-%m', due_date)=?
-                AND period_no=(
-                    SELECT MIN(period_no) FROM payment_schedule ps2
-                    WHERE ps2.ticket_id=payment_schedule.ticket_id
-                      AND ps2.status='pending'
-                )
           )
         ORDER BY t.id DESC
     """
     with get_conn() as conn:
         rows = conn.execute(sql, (ym,)).fetchall()
-        result = [_enrich_ticket(dict(r), conn, today) for r in rows]
+        result = []
+        for r in rows:
+            d = _enrich_ticket(dict(r), conn, today)
+            # 用本月那一期的資料覆蓋顯示欄位
+            nxt = conn.execute(
+                """SELECT due_date, interest, late_fee, paid_principal, principal_balance
+                   FROM payment_schedule
+                   WHERE ticket_id=? AND status='pending'
+                     AND strftime('%Y-%m', due_date)=?
+                   ORDER BY period_no LIMIT 1""",
+                (d["id"], ym)
+            ).fetchone()
+            if nxt:
+                d["next_due_date"]          = nxt["due_date"]
+                d["next_interest"]          = nxt["interest"]
+                d["next_late_fee"]          = nxt["late_fee"]
+                d["next_paid_principal"]    = nxt["paid_principal"]
+                d["next_principal_balance"] = nxt["principal_balance"]
+                d["next_due_overdue"]       = nxt["due_date"] < today
+            result.append(d)
     return result
 
 
@@ -409,6 +423,63 @@ def create_ticket(data: dict) -> int:
     generate_payment_schedule(tid, float(data["principal"]),
                               float(data["monthly_rate"]), pawn_date, months)
     return tid
+
+
+def update_ticket(ticket_id: int, data: dict):
+    new_principal = float(data["principal"])
+    new_rate      = float(data["monthly_rate"])
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE tickets SET
+               item_name=?, item_description=?, category_id=?,
+               principal=?, monthly_rate=?, pawn_date=?, due_date=?, notes=?
+               WHERE id=?""",
+            (
+                data["item_name"],
+                data.get("item_description", ""),
+                data.get("category_id") or None,
+                new_principal,
+                new_rate,
+                data["pawn_date"],
+                data["due_date"],
+                data.get("notes", ""),
+                ticket_id,
+            )
+        )
+        # 同步更新客戶資料
+        cid = conn.execute(
+            "SELECT customer_id FROM tickets WHERE id=?", (ticket_id,)
+        ).fetchone()["customer_id"]
+        if cid and data.get("customer_name", "").strip():
+            conn.execute(
+                "UPDATE customers SET name=?, id_card=?, phone=?, address=? WHERE id=?",
+                (
+                    data.get("customer_name", ""),
+                    data.get("customer_id_card", ""),
+                    data.get("customer_phone", ""),
+                    data.get("customer_address", ""),
+                    cid,
+                )
+            )
+        # 以已付期數的回本為基準，重算第一筆 pending 的本金餘額，並重算利息
+        paid_repaid = conn.execute(
+            """SELECT COALESCE(SUM(paid_principal),0) FROM payment_schedule
+               WHERE ticket_id=? AND status='paid'""",
+            (ticket_id,)
+        ).fetchone()[0]
+        remaining_principal = max(0, new_principal - paid_repaid)
+        first_pending = conn.execute(
+            """SELECT id, period_no FROM payment_schedule
+               WHERE ticket_id=? AND status='pending'
+               ORDER BY period_no LIMIT 1""",
+            (ticket_id,)
+        ).fetchone()
+        if first_pending:
+            conn.execute(
+                "UPDATE payment_schedule SET principal_balance=? WHERE id=?",
+                (remaining_principal, first_pending["id"])
+            )
+            _recalculate_schedule(conn, ticket_id, first_pending["period_no"])
 
 
 def redeem_ticket(ticket_id: int, calc_date_str: str = None, notes: str = ""):
@@ -560,6 +631,9 @@ def get_payment_schedule(ticket_id: int):
     result = []
     for r in rows:
         d = dict(r)
+        # 剩餘本金 = 本金 - 回本
+        d["principal_remaining"] = max(0, d["principal_balance"] - d["paid_principal"])
+        # 剩餘利息（modal 用）
         d["remaining"] = round(max(0, d["interest"] + d["late_fee"] - d["paid_amount"]), 0)
         d["is_overdue"] = d["status"] == "pending" and d["due_date"] < today
         d["overdue_days"] = 0
@@ -607,30 +681,67 @@ def _recalculate_schedule(conn, ticket_id: int, from_period: int):
         if running is None:
             running = p["principal_balance"]
         if p["period_no"] >= from_period and p["status"] != "paid":
+            # 利息 = 剩餘本金 × 月利率（剩餘本金 = 本金 - 回本）
+            remaining_principal = max(0, running - p["paid_principal"])
             conn.execute(
                 "UPDATE payment_schedule SET principal_balance=?, interest=? WHERE id=?",
-                (running, round(running * (rate / 100), 0), p["id"])
+                (running, round(remaining_principal * (rate / 100), 0), p["id"])
             )
         running = max(0, running - p["paid_principal"])
 
 
-def repay_principal(ticket_id: int, amount: float, notes: str = ""):
-    """回本：將金額記錄在最早一筆未付期數，並重算後續各期利息"""
+def repay_principal(ticket_id: int, amount: float, notes: str = "", schedule_id: int = None):
+    """回本：將金額記錄在指定期數（或最早一筆未付），並重算後續各期利息"""
     with get_conn() as conn:
-        first = conn.execute(
-            """SELECT * FROM payment_schedule
-               WHERE ticket_id=? AND status='pending'
-               ORDER BY period_no LIMIT 1""",
-            (ticket_id,)
-        ).fetchone()
-        if not first:
+        if schedule_id:
+            period = conn.execute(
+                "SELECT * FROM payment_schedule WHERE id=? AND ticket_id=?",
+                (schedule_id, ticket_id)
+            ).fetchone()
+        else:
+            period = conn.execute(
+                """SELECT * FROM payment_schedule
+                   WHERE ticket_id=? AND status='pending'
+                   ORDER BY period_no LIMIT 1""",
+                (ticket_id,)
+            ).fetchone()
+        if not period:
             return False
-        new_principal = first["paid_principal"] + amount
+        new_principal = period["paid_principal"] + amount
         conn.execute(
             "UPDATE payment_schedule SET paid_principal=?, notes=? WHERE id=?",
-            (new_principal, notes or first["notes"], first["id"])
+            (new_principal, notes or period["notes"], period["id"])
         )
-        _recalculate_schedule(conn, ticket_id, first["period_no"])
+        _recalculate_schedule(conn, ticket_id, period["period_no"])
+    return True
+
+
+def cancel_period_payment(schedule_id: int):
+    """取消付款：清除該期已繳金額與滯納金，狀態改回 pending"""
+    with get_conn() as conn:
+        conn.execute(
+            """UPDATE payment_schedule
+               SET paid_amount=0, late_fee=0, status='pending', paid_at=NULL, notes=NULL
+               WHERE id=?""",
+            (schedule_id,)
+        )
+    return True
+
+
+def cancel_period_repayment(schedule_id: int):
+    """取消回本：將該期 paid_principal 歸零，並重算後續各期利息"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT ticket_id, period_no FROM payment_schedule WHERE id=?",
+            (schedule_id,)
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE payment_schedule SET paid_principal=0 WHERE id=?",
+            (schedule_id,)
+        )
+        _recalculate_schedule(conn, row["ticket_id"], row["period_no"])
     return True
 
 

@@ -50,12 +50,6 @@
       <div class="d-flex align-items-center gap-2">
         {% if t.status == 'active' %}
           <span class="status-badge badge-active">當中</span>
-          <button class="btn btn-success btn-sm" onclick="openRepay({{ t.id }}, '{{ t.ticket_no }}', {{ t.principal }})">
-            <i class="bi bi-arrow-down-circle me-1"></i>回本
-          </button>
-          <button class="btn btn-primary btn-sm" onclick="openSettle({{ t.id }}, '{{ t.ticket_no }}')">
-            <i class="bi bi-check2-circle me-1"></i>結清
-          </button>
         {% elif t.status == 'redeemed' %}
           <span class="status-badge badge-redeemed">已贖回</span>
         {% else %}
@@ -71,81 +65,117 @@
         <span class="section-title mb-0">繳款明細</span>
         <span class="text-muted" style="font-size:.78rem">到期日 {{ t.due_date }}</span>
       </div>
-      <div class="table-responsive">
-        <table class="table table-hover mb-0" style="white-space:nowrap">
-          <thead>
-            <tr>
-              <th>應繳日期</th>
-              <th>期數</th>
-              <th style="text-align:right">本金餘額</th>
-              <th style="text-align:right">已繳金額</th>
-              <th style="text-align:right">利息</th>
-              <th style="text-align:right">滯納金</th>
-              <th style="text-align:right">回本</th>
-              <th style="text-align:right">剩餘金額</th>
-              <th>狀態</th>
-              {% if t.status == 'active' %}<th>操作</th>{% endif %}
-            </tr>
-          </thead>
-          <tbody>
-          {% for p in t.schedule %}
-            <tr {% if p.is_overdue %}style="background:rgba(239,68,68,.06)"{% endif %}>
-              <td>
-                {% if p.is_overdue %}
-                  <span class="text-red fw-semibold">{{ p.due_date }}</span>
-                  <span class="text-red" style="font-size:.75rem">（逾期 {{ p.overdue_days }} 天）</span>
-                {% else %}
-                  {{ p.due_date }}
-                {% endif %}
-              </td>
-              <td class="fw-semibold">第 {{ p.period_no }} 期</td>
-              <td style="text-align:right">${{ "{:,.0f}".format(p.principal_balance) }}</td>
-              <td style="text-align:right">
+      <table class="table table-hover mb-0"
+             style="table-layout:fixed; width:100%; word-break:break-word">
+        <colgroup>
+          <col style="width:10%"><!-- 應繳日期 -->
+          <col style="width:6%"> <!-- 期數 -->
+          <col style="width:9%"> <!-- 本金 -->
+          <col style="width:7%"> <!-- 回本 -->
+          <col style="width:9%"> <!-- 剩餘本金 -->
+          <col style="width:9%"> <!-- 已繳金額 -->
+          <col style="width:8%"> <!-- 利息 -->
+          <col style="width:8%"> <!-- 滯納金 -->
+          <col style="width:8%"> <!-- 狀態 -->
+          {% if t.status == 'active' %}<col style="width:22%">{% endif %}<!-- 操作 -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>應繳日期</th>
+            <th>期數</th>
+            <th style="text-align:right">本金</th>
+            <th style="text-align:right">回本</th>
+            <th style="text-align:right">剩餘本金</th>
+            <th style="text-align:right">利息</th>
+            <th style="text-align:right">已繳金額</th>
+            <th style="text-align:right">滯納金</th>
+            <th>狀態</th>
+            {% if t.status == 'active' %}<th>操作</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in t.schedule %}
+          <tr {% if p.is_overdue %}style="background:rgba(239,68,68,.06)"{% endif %}>
+            <td>
+              {% if p.is_overdue %}
+                <span class="text-red fw-semibold">{{ p.due_date }}</span>
+                <span class="text-red" style="font-size:.75rem">逾{{ p.overdue_days }}天</span>
+              {% else %}
+                {{ p.due_date }}
+              {% endif %}
+            </td>
+            <td class="fw-semibold">第{{ p.period_no }}期</td>
+            <td style="text-align:right">${{ "{:,.0f}".format(p.principal_balance) }}</td>
+            <td style="text-align:right">
+              {% if p.paid_principal > 0 %}
+                <span class="text-blue">${{ "{:,.0f}".format(p.paid_principal) }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td style="text-align:right">
+              {% if p.principal_remaining > 0 %}
+                <span class="text-amber fw-semibold">${{ "{:,.0f}".format(p.principal_remaining) }}</span>
+              {% else %}
+                <span class="text-green">$0</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right">${{ "{:,.0f}".format(p.interest) }}</td>
+            <td style="text-align:right">
+              {% if p.paid_amount > 0 %}
                 <span class="text-green">${{ "{:,.0f}".format(p.paid_amount) }}</span>
-              </td>
-              <td style="text-align:right">${{ "{:,.0f}".format(p.interest) }}</td>
-              <td style="text-align:right">
-                {% if p.late_fee > 0 %}
-                  <span class="text-red">${{ "{:,.0f}".format(p.late_fee) }}</span>
-                {% else %}$0{% endif %}
-              </td>
-              <td style="text-align:right">
-                {% if p.paid_principal > 0 %}
-                  <span class="text-blue">${{ "{:,.0f}".format(p.paid_principal) }}</span>
-                {% else %}$0{% endif %}
-              </td>
-              <td style="text-align:right">
-                {% if p.remaining > 0 %}
-                  <span class="text-amber fw-semibold">${{ "{:,.0f}".format(p.remaining) }}</span>
-                {% else %}
-                  <span class="text-green">$0</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if p.status == 'paid' %}
-                  <span class="status-badge badge-redeemed">已付款</span>
-                {% elif p.is_overdue %}
-                  <span class="status-badge badge-overdue">逾期</span>
-                {% else %}
-                  <span class="status-badge badge-forfeited" style="background:rgba(245,158,11,.2);color:#fbbf24;border-color:rgba(245,158,11,.35)">待付款</span>
-                {% endif %}
-              </td>
-              {% if t.status == 'active' %}
-              <td>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td style="text-align:right">
+              {% if p.late_fee > 0 %}
+                <span class="text-red">${{ "{:,.0f}".format(p.late_fee) }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if p.status == 'paid' %}
+                <span class="status-badge badge-redeemed">已付款</span>
+              {% elif p.is_overdue %}
+                <span class="status-badge badge-overdue">逾期</span>
+              {% else %}
+                <span class="status-badge badge-forfeited"
+                  style="background:rgba(245,158,11,.12);color:#fcd34d;border-color:rgba(245,158,11,.3)">待付款</span>
+              {% endif %}
+            </td>
+            {% if t.status == 'active' %}
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
                 {% if p.status != 'paid' %}
                 <button class="btn btn-primary btn-sm py-0 px-2"
                         onclick="openPayModal({{ t.id }}, {{ p.id }}, {{ p.period_no }},
                                  {{ p.interest }}, {{ p.late_fee }}, {{ p.paid_amount }})">
-                  記錄付款
+                  付款
+                </button>
+                <button class="btn btn-outline-success btn-sm py-0 px-2"
+                        onclick="openRepay({{ t.id }}, {{ p.id }}, '{{ t.ticket_no }}', {{ p.principal_balance }}, {{ p.period_no }})">
+                  回本
+                </button>
+                <button class="btn btn-outline-primary btn-sm py-0 px-2"
+                        onclick="openSettle({{ t.id }}, '{{ t.ticket_no }}')">
+                  結清
                 </button>
                 {% endif %}
-              </td>
-              {% endif %}
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
+                {% if p.paid_amount > 0 or p.status == 'paid' %}
+                <button class="btn btn-outline-danger btn-sm py-0 px-2"
+                        onclick="cancelPayment({{ t.id }}, {{ p.id }})">
+                  取消付款
+                </button>
+                {% endif %}
+                {% if p.paid_principal > 0 %}
+                <button class="btn btn-outline-danger btn-sm py-0 px-2"
+                        onclick="cancelRepayment({{ t.id }}, {{ p.id }})">
+                  取消回本
+                </button>
+                {% endif %}
+              </div>
+            </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
     {% endif %}
   </div>
@@ -267,7 +297,7 @@
 <script>
 let _payTicketId = null, _payScheduleId = null;
 let _settleTicketId = null;
-let _repayTicketId = null;
+let _repayTicketId = null, _repayScheduleId = null;
 
 function fmt(n) {
   return '$' + Number(n).toLocaleString('zh-TW', {maximumFractionDigits: 0});
@@ -301,9 +331,10 @@ function submitPayment() {
   }).then(() => location.reload());
 }
 
-function openRepay(ticketId, ticketNo, principal) {
-  _repayTicketId = ticketId;
-  document.getElementById('repayTicketNo').textContent  = ticketNo;
+function openRepay(ticketId, scheduleId, ticketNo, principal, periodNo) {
+  _repayTicketId  = ticketId;
+  _repayScheduleId = scheduleId;
+  document.getElementById('repayTicketNo').textContent  = ticketNo + ' — 第 ' + periodNo + ' 期';
   document.getElementById('repayPrincipal').textContent = fmt(principal);
   document.getElementById('repayAmount').value = '';
   document.getElementById('repayNotes').value  = '';
@@ -316,7 +347,11 @@ function submitRepay() {
   fetch('/tickets/' + _repayTicketId + '/repay', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ amount, notes: document.getElementById('repayNotes').value }),
+    body: JSON.stringify({
+      schedule_id: _repayScheduleId,
+      amount,
+      notes: document.getElementById('repayNotes').value
+    }),
   }).then(() => location.reload());
 }
 
@@ -328,6 +363,18 @@ function openSettle(ticketId, ticketNo) {
 
 function submitSettle() {
   fetch('/tickets/' + _settleTicketId + '/settle', { method: 'POST' })
+    .then(() => location.reload());
+}
+
+function cancelPayment(ticketId, scheduleId) {
+  if (!confirm('確定取消這筆付款紀錄？')) return;
+  fetch('/tickets/' + ticketId + '/cancel_payment/' + scheduleId, { method: 'POST' })
+    .then(() => location.reload());
+}
+
+function cancelRepayment(ticketId, scheduleId) {
+  if (!confirm('確定取消這期的回本？回本金額將歸零，後續各期利息將重新計算。')) return;
+  fetch('/tickets/' + ticketId + '/cancel_repayment/' + scheduleId, { method: 'POST' })
     .then(() => location.reload());
 }
 </script>
