@@ -10,6 +10,23 @@
 </head>
 <body>
 
+<!-- Ambient blobs -->
+<div class="amb-blobs" aria-hidden="true">
+  <div class="amb-blob b-blue"></div>
+  <div class="amb-blob b-cyan"></div>
+  <div class="amb-blob b-amber"></div>
+  <div class="amb-blob b-purple"></div>
+</div>
+
+<!-- Crosshair cursor -->
+<div id="crosshair" aria-hidden="true">
+  <div class="ch-v ch-top"></div>
+  <div class="ch-v ch-bot"></div>
+  <div class="ch-h ch-lft"></div>
+  <div class="ch-h ch-rgt"></div>
+  <div class="ch-dot"></div>
+</div>
+
 <!-- Sidebar -->
 <div class="sidebar d-flex flex-column">
 
@@ -94,14 +111,123 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
-  function updateClock() {
-    const now = new Date();
-    document.getElementById('clock').textContent =
-      now.toLocaleDateString('zh-TW') + ' ' +
-      now.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
+/* ── Live clock ── */
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleDateString('zh-TW') + ' ' +
+    now.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+/* ── Button ripple ── */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn');
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 2;
+  const r = document.createElement('span');
+  r.style.cssText = [
+    'position:absolute', 'border-radius:50%',
+    'background:rgba(255,255,255,.18)',
+    `width:${size}px`, `height:${size}px`,
+    `left:${e.clientX - rect.left - size/2}px`,
+    `top:${e.clientY - rect.top - size/2}px`,
+    'transform:scale(0)',
+    'animation:ripple-anim .55s ease-out forwards',
+    'pointer-events:none',
+  ].join(';');
+  btn.style.position = 'relative';
+  btn.style.overflow = 'hidden';
+  btn.appendChild(r);
+  r.addEventListener('animationend', () => r.remove());
+});
+
+/* ── Crosshair cursor ── */
+(function () {
+  const el = document.getElementById('crosshair');
+  let tx = -200, ty = -200, cx = -200, cy = -200;
+  document.addEventListener('mousemove', e => { tx = e.clientX; ty = e.clientY; });
+  (function lerp() {
+    cx += (tx - cx) * 0.22;
+    cy += (ty - cy) * 0.22;
+    el.style.left = cx + 'px';
+    el.style.top  = cy + 'px';
+    requestAnimationFrame(lerp);
+  })();
+  document.addEventListener('mousedown', () => {
+    el.style.transform = 'translate(-50%,-50%) scale(.68)';
+  });
+  document.addEventListener('mouseup', () => {
+    el.style.transform = 'translate(-50%,-50%) scale(1)';
+  });
+})();
+
+/* ── Particle network ── */
+(function () {
+  const cv = document.createElement('canvas');
+  cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:.85';
+  document.body.appendChild(cv);
+  const ctx = cv.getContext('2d');
+  let W, H;
+  function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const N = 72, LINK = 145;
+  const pts = Array.from({length: N}, () => ({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    vx: (Math.random() - .5) * .55,
+    vy: (Math.random() - .5) * .55,
+    r: Math.random() * 1.6 + .7,
+  }));
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of pts) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+    }
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < LINK) {
+          const a = (1 - d / LINK) * .3;
+          ctx.beginPath();
+          ctx.strokeStyle = `rgba(59,130,246,${a})`;
+          ctx.lineWidth = .9;
+          ctx.moveTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[j].x, pts[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(100,175,255,.6)';
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
   }
-  updateClock();
-  setInterval(updateClock, 60000);
+  frame();
+})();
+
+/* ── Topbar glitch effect ── */
+(function () {
+  const h = document.querySelector('.topbar h5');
+  if (!h) return;
+  function glitch() {
+    h.classList.add('glitching');
+    setTimeout(() => h.classList.remove('glitching'), 700);
+    setTimeout(glitch, 6000 + Math.random() * 12000);
+  }
+  setTimeout(glitch, 4000 + Math.random() * 6000);
+})();
 </script>
 {% block scripts %}{% endblock %}
 </body>

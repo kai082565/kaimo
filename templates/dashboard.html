@@ -17,7 +17,7 @@
       <div class="d-flex align-items-center gap-3">
         <div class="stat-icon blue"><i class="bi bi-ticket-perforated"></i></div>
         <div>
-          <div class="stat-value">{{ stats.active_count }}</div>
+          <div class="stat-value" data-countup="{{ stats.active_count }}">{{ stats.active_count }}</div>
           <div class="stat-label">當票中</div>
         </div>
       </div>
@@ -28,7 +28,7 @@
       <div class="d-flex align-items-center gap-3">
         <div class="stat-icon green"><i class="bi bi-cash-stack"></i></div>
         <div>
-          <div class="stat-value">{{ "{:,.0f}".format(stats.total_principal) }}</div>
+          <div class="stat-value" data-countup="{{ stats.total_principal | int }}">{{ "{:,.0f}".format(stats.total_principal) }}</div>
           <div class="stat-label">放款總額（元）</div>
         </div>
       </div>
@@ -39,7 +39,7 @@
       <div class="d-flex align-items-center gap-3">
         <div class="stat-icon amber"><i class="bi bi-coin"></i></div>
         <div>
-          <div class="stat-value">{{ "{:,.0f}".format(stats.month_interest) }}</div>
+          <div class="stat-value" data-countup="{{ stats.month_interest | int }}">{{ "{:,.0f}".format(stats.month_interest) }}</div>
           <div class="stat-label">本月利息收入（元）</div>
         </div>
       </div>
@@ -50,7 +50,7 @@
       <div class="d-flex align-items-center gap-3">
         <div class="stat-icon red"><i class="bi bi-exclamation-triangle"></i></div>
         <div>
-          <div class="stat-value {% if stats.overdue > 0 %}text-red{% endif %}">{{ stats.overdue }}</div>
+          <div class="stat-value {% if stats.overdue > 0 %}text-red{% endif %}" data-countup="{{ stats.overdue }}">{{ stats.overdue }}</div>
           <div class="stat-label">逾期未贖</div>
         </div>
       </div>
@@ -156,4 +156,30 @@
   </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Count-up animation for stat cards */
+document.querySelectorAll('[data-countup]').forEach((el, i) => {
+  const target = parseInt(el.dataset.countup, 10);
+  if (!target) return;
+  const withComma = target >= 1000;
+  const dur = 1100 + i * 80;
+  const delay = 120 + i * 80;
+  el.textContent = '0';
+  setTimeout(() => {
+    const t0 = performance.now();
+    function tick(now) {
+      const p = Math.min((now - t0) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      const val = Math.round(ease * target);
+      el.textContent = withComma ? val.toLocaleString('zh-TW') : val;
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = withComma ? target.toLocaleString('zh-TW') : target;
+    }
+    requestAnimationFrame(tick);
+  }, delay);
+});
+</script>
 {% endblock %}

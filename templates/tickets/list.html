@@ -117,7 +117,7 @@
           </td>
           <td>{{ t.due_date }}</td>
           <td>
-            {% if t.is_overdue %}
+            {% if t.is_overdue or t.next_due_overdue %}
               <span class="status-badge badge-overdue">逾期</span>
             {% elif t.status == 'active' %}
               <span class="status-badge badge-active">當中</span>

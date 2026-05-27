@@ -380,7 +380,17 @@ def get_ticket(ticket_id):
         d["interest"] = calc_interest(d["principal"], d["monthly_rate"], months)
         d["total"] = d["principal"] + d["interest"]
         d["months"] = months
-        d["is_overdue"] = d["status"] == "active" and d["due_date"] < date.today().isoformat()
+        today_iso = date.today().isoformat()
+        d["is_overdue"] = d["status"] == "active" and d["due_date"] < today_iso
+        nxt_sched = conn.execute(
+            """SELECT due_date FROM payment_schedule
+               WHERE ticket_id=? AND status='pending'
+               ORDER BY period_no LIMIT 1""",
+            (ticket_id,)
+        ).fetchone()
+        d["next_due_overdue"] = bool(
+            d["status"] == "active" and nxt_sched and nxt_sched["due_date"] < today_iso
+        )
 
         history = conn.execute(
             "SELECT * FROM ticket_history WHERE ticket_id=? ORDER BY action_date DESC",
