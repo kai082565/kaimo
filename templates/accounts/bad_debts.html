@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}帳務管理 — 呆帳管理{% endblock %}
+{% block page_title %}帳務管理{% endblock %}
+
+{% block content %}
+
+<!-- 頁內 Tab -->
+<div class="acct-tabs mb-4">
+  <a href="{{ url_for('accounts_overdue') }}" class="acct-tab">
+    <i class="bi bi-clock-history me-1"></i>逾期總覽
+  </a>
+  <a href="{{ url_for('accounts_bad_debts') }}" class="acct-tab active">
+    <i class="bi bi-exclamation-octagon me-1"></i>呆帳管理
+    {% if data.total_count > 0 %}
+      <span class="tab-badge">{{ data.total_count }}</span>
+    {% endif %}
+  </a>
+</div>
+
+<!-- 篩選列 -->
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <form method="get" id="filterForm" class="d-flex align-items-center gap-2">
+    <div class="input-group input-group-sm" style="width:220px">
+      <span class="input-group-text" style="background:rgba(0,0,0,.3);border-color:var(--border-bright)">
+        <i class="bi bi-search text-muted"></i>
+      </span>
+      <input type="text" name="q" class="form-control" placeholder="搜尋客戶姓名…"
+             value="{{ search }}" style="background:rgba(0,0,0,.3)">
+    </div>
+    <button type="submit" class="btn btn-outline-secondary btn-sm px-3">搜尋</button>
+    {% if search %}
+    <a href="{{ url_for('accounts_bad_debts') }}" class="btn btn-sm btn-outline-danger px-3">清除</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- 統計卡 -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">總呆帳筆數</div>
+      <div class="fw-bold text-red" style="font-size:1.9rem">{{ data.total_count }} 筆</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">總呆帳金額</div>
+      <div class="fw-bold text-red" style="font-size:1.9rem">${{ "{:,.0f}".format(data.total_amount) }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">本月新增呆帳</div>
+      <div class="fw-bold text-amber" style="font-size:1.9rem">{{ data.new_count }} 筆</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">本月呆帳金額</div>
+      <div class="fw-bold text-amber" style="font-size:1.9rem">${{ "{:,.0f}".format(data.new_amount) }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">本月呆帳回收金額</div>
+      <div class="fw-bold text-green" style="font-size:1.9rem">${{ "{:,.0f}".format(data.recovered_month) }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- 呆帳清單 -->
+<div class="card p-0">
+  {% if data.records %}
+  <div style="overflow-x:auto">
+    <table class="table table-hover mb-0">
+      <colgroup>
+        <col style="width:20%">
+        <col style="width:16%">
+        <col style="width:16%">
+        <col style="width:14%">
+        <col style="width:16%">
+        <col style="width:10%">
+        <col style="width:8%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>客戶</th>
+          <th style="text-align:right">呆帳金額</th>
+          <th style="text-align:right">回收金額</th>
+          <th style="text-align:center">回收狀況</th>
+          <th>日期</th>
+          <th>當票</th>
+          <th style="text-align:center">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in data.records %}
+        <tr id="bd-row-{{ r.id }}">
+          <td>
+            {% if r.customer_id %}
+              <a href="{{ url_for('customer_detail', customer_id=r.customer_id) }}" class="fw-semibold">
+                {{ r.customer_name or '—' }}
+              </a>
+              {% if r.customer_phone %}
+                <div class="text-muted" style="font-size:.75rem">{{ r.customer_phone }}</div>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">臨時客戶</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right" class="text-red fw-semibold">
+            ${{ "{:,.0f}".format(r.amount) }}
+          </td>
+          <td style="text-align:right" class="text-green fw-semibold" id="bd-recovered-{{ r.id }}">
+            ${{ "{:,.0f}".format(r.recovered_amount) }}
+          </td>
+          <td style="text-align:center">
+            <span class="bd-status-badge {% if r.status == '已回收' %}bd-recovered{% else %}bd-unrec{% endif %}"
+                  id="bd-status-{{ r.id }}">
+              {{ r.status }}
+            </span>
+          </td>
+          <td class="text-muted">{{ r.created_date }}</td>
+          <td>
+            <a href="{{ url_for('ticket_detail', ticket_id=r.ticket_id) }}"
+               class="text-muted" style="font-size:.82rem">
+              <i class="bi bi-ticket-perforated me-1"></i>#{{ r.ticket_id }}
+            </a>
+          </td>
+          <td style="text-align:center">
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    onclick="openEdit({{ r.id }}, {{ r.recovered_amount }}, '{{ r.status }}', {{ (r.notes or '')|tojson }})"
+                    title="編輯回收狀況">
+              <i class="bi bi-pencil-fill text-blue"></i>
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-4 py-2 text-muted" style="font-size:.82rem; border-top:1px solid var(--border)">
+    共 {{ data.records|length }} 筆呆帳記錄
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-check2-circle text-green"></i>
+    <div>{% if search %}查無符合「{{ search }}」的呆帳記錄{% else %}目前沒有呆帳記錄{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 編輯 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content" style="background:var(--bg-card);border-color:var(--border-bright)">
+      <div class="modal-header" style="border-color:var(--border)">
+        <h6 class="modal-title">編輯回收資訊</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-id">
+        <div class="mb-3">
+          <label class="form-label text-muted" style="font-size:.85rem">回收金額</label>
+          <input type="number" id="edit-recovered" class="form-control" min="0" step="1" placeholder="0">
+        </div>
+        <div class="mb-3">
+          <label class="form-label text-muted" style="font-size:.85rem">回收狀況</label>
+          <select id="edit-status" class="form-select">
+            <option value="未回收">未回收</option>
+            <option value="已回收">已回收</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label text-muted" style="font-size:.85rem">備註</label>
+          <textarea id="edit-notes" class="form-control" rows="2" placeholder="選填…"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between" style="border-color:var(--border)">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="cancelBadDebt()">
+          <i class="bi bi-trash me-1"></i>取消呆帳標記
+        </button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="saveEdit()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+.bd-status-badge {
+  display: inline-block;
+  padding: .18rem .6rem;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+}
+.bd-unrec   { background: rgba(239,68,68,.18); color: #f87171; border: 1px solid rgba(239,68,68,.35); }
+.bd-recovered { background: rgba(34,197,94,.18); color: #4ade80; border: 1px solid rgba(34,197,94,.35); }
+</style>
+<script>
+let editModal;
+document.addEventListener('DOMContentLoaded', () => {
+  editModal = new bootstrap.Modal(document.getElementById('editModal'));
+});
+
+function openEdit(id, recovered, status, notes) {
+  document.getElementById('edit-id').value = id;
+  document.getElementById('edit-recovered').value = recovered;
+  document.getElementById('edit-status').value = status;
+  document.getElementById('edit-notes').value = notes || '';
+  editModal.show();
+}
+
+async function saveEdit() {
+  const id        = document.getElementById('edit-id').value;
+  const recovered = parseFloat(document.getElementById('edit-recovered').value) || 0;
+  const status    = document.getElementById('edit-status').value;
+  const notes     = document.getElementById('edit-notes').value;
+
+  const res = await fetch(`/api/accounts/bad-debt/${id}/update`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({recovered_amount: recovered, status, notes})
+  });
+  if (!res.ok) return;
+
+  document.getElementById(`bd-recovered-${id}`).textContent =
+    '$' + recovered.toLocaleString('zh-TW', {maximumFractionDigits: 0});
+  const badge = document.getElementById(`bd-status-${id}`);
+  badge.textContent = status;
+  badge.className = 'bd-status-badge ' + (status === '已回收' ? 'bd-recovered' : 'bd-unrec');
+  editModal.hide();
+}
+
+async function cancelBadDebt() {
+  const id = document.getElementById('edit-id').value;
+  if (!confirm('確定要取消此呆帳標記？此動作無法復原。')) return;
+  const res = await fetch(`/api/accounts/bad-debt/${id}/cancel`, {method: 'POST'});
+  if (!res.ok) return;
+  document.getElementById(`bd-row-${id}`).remove();
+  editModal.hide();
+}
+
+document.querySelector('input[name="q"]').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('filterForm').submit(); }
+});
+</script>
+{% endblock %}

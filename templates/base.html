@@ -67,6 +67,22 @@
        class="nav-link {% if 'customer' in request.endpoint %}active{% endif %}">
       <i class="bi bi-people"></i><span>客戶管理</span>
     </a>
+    <a href="{{ url_for('performance') }}"
+       class="nav-link {% if request.endpoint in ['performance','performance_export'] %}active{% endif %}">
+      <i class="bi bi-trophy"></i><span>業績排名</span>
+    </a>
+    <a href="{{ url_for('staff_list') }}"
+       class="nav-link nav-sub {% if 'staff' in request.endpoint %}active{% endif %}">
+      <i class="bi bi-person-badge"></i><span>業務員管理</span>
+    </a>
+    <a href="{{ url_for('accounts_overdue') }}"
+       class="nav-link {% if request.endpoint and 'accounts' in request.endpoint %}active{% endif %}">
+      <i class="bi bi-exclamation-diamond"></i><span>帳務管理</span>
+    </a>
+    <a href="{{ url_for('ledger_overview') }}"
+       class="nav-link {% if request.endpoint and 'ledger' in request.endpoint %}active{% endif %}">
+      <i class="bi bi-journal-text"></i><span>總帳報表</span>
+    </a>
     <a href="{{ url_for('reports') }}"
        class="nav-link {% if request.endpoint=='reports' %}active{% endif %}">
       <i class="bi bi-bar-chart-line"></i><span>報表分析</span>

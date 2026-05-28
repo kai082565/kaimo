@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}總帳報表 — 交易明細{% endblock %}
+{% block page_title %}總帳報表{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-success" onclick="openAdd()">
+  <i class="bi bi-plus-lg me-1"></i>新增交易
+</button>
+<a href="{{ url_for('ledger_transactions_export', date_from=date_from, date_to=date_to, type=type_filter) }}"
+   class="btn btn-sm btn-primary">
+  <i class="bi bi-download me-1"></i>匯出
+</a>
+<button class="btn btn-sm btn-secondary" onclick="window.print()">
+  <i class="bi bi-printer me-1"></i>列印
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- 頁內 Tab -->
+<div class="acct-tabs mb-4">
+  <a href="{{ url_for('ledger_overview') }}" class="acct-tab">
+    <i class="bi bi-grid me-1"></i>總覽
+  </a>
+  <a href="{{ url_for('ledger_transactions') }}" class="acct-tab active">
+    <i class="bi bi-list-ul me-1"></i>交易明細
+  </a>
+  <a href="{{ url_for('ledger_providers') }}" class="acct-tab">
+    <i class="bi bi-people-fill me-1"></i>資金提供方
+  </a>
+</div>
+
+<!-- 篩選列 -->
+<form method="get" id="filterForm">
+<div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
+  <span class="text-muted" style="font-size:.85rem">日期範圍：</span>
+  <input type="date" name="date_from" class="form-control form-control-sm" style="width:150px"
+         value="{{ date_from }}">
+  <span class="text-muted">至</span>
+  <input type="date" name="date_to" class="form-control form-control-sm" style="width:150px"
+         value="{{ date_to }}">
+  <button type="submit" class="btn btn-sm px-3"
+          style="background:linear-gradient(90deg,#06b6d4,#3b82f6);color:#fff;border:none">查詢</button>
+
+  <span class="text-muted ms-2" style="font-size:.85rem">排序：</span>
+  <button type="button" class="btn btn-sm btn-outline-secondary px-3"
+          onclick="toggleSort()" id="sortBtn">
+    {{ '最新在上' if sort_desc else '最舊在上' }}
+  </button>
+  <input type="hidden" name="sort" id="sortInput" value="{{ 'desc' if sort_desc else 'asc' }}">
+
+  <span class="text-muted ms-2" style="font-size:.85rem">類型：</span>
+  <select name="type" class="form-select form-select-sm" style="width:130px" onchange="this.form.submit()">
+    {% for t in ['全部','出款','回本','結清','利息','逾期','呆帳','營運支出','其他收入','資本增減'] %}
+    <option value="{{ t }}" {{ 'selected' if type_filter==t }}>{{ t }}</option>
+    {% endfor %}
+  </select>
+</div>
+</form>
+
+<!-- 表格 -->
+<div class="card p-0">
+  {% if rows %}
+  <div style="overflow-x:auto">
+    <table class="table table-hover mb-0" id="txTable" style="font-size:.85rem">
+      <thead>
+        <tr>
+          <th style="min-width:88px">日期</th>
+          <th style="min-width:160px">項目</th>
+          <th style="text-align:right;min-width:110px">昨日餘額</th>
+          <th style="text-align:right;min-width:100px" class="text-red">出款金額</th>
+          <th style="text-align:right;min-width:100px" class="text-amber">營運支出</th>
+          <th style="text-align:right;min-width:100px" class="text-green">收款金額</th>
+          <th style="text-align:right;min-width:100px" class="text-blue">其他收入</th>
+          <th style="text-align:right;min-width:100px">資本額異動</th>
+          <th style="text-align:right;min-width:110px;font-weight:700">本日餘額</th>
+          <th style="min-width:70px;text-align:center">建立者</th>
+          <th style="min-width:72px;text-align:center">類型</th>
+          <th style="text-align:center;min-width:56px">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="text-muted">{{ r.date }}</td>
+          <td>{{ r.item }}</td>
+          <td style="text-align:right" class="text-muted">
+            ${{ "{:,.0f}".format(r.prev_balance) }}
+          </td>
+          <td style="text-align:right" class="{% if r.outgoing %}text-red{% else %}text-muted{% endif %}">
+            {% if r.outgoing %}${{ "{:,.0f}".format(r.outgoing) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right" class="{% if r.op_expense %}text-amber{% else %}text-muted{% endif %}">
+            {% if r.op_expense %}${{ "{:,.0f}".format(r.op_expense) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right" class="{% if r.income %}text-green{% else %}text-muted{% endif %}">
+            {% if r.income %}${{ "{:,.0f}".format(r.income) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right" class="{% if r.other_income %}text-blue{% else %}text-muted{% endif %}">
+            {% if r.other_income %}${{ "{:,.0f}".format(r.other_income) }}{% else %}—{% endif %}
+          </td>
+          <td style="text-align:right" class="{% if r.capital_change > 0 %}text-green{% elif r.capital_change < 0 %}text-red{% else %}text-muted{% endif %}">
+            {% if r.capital_change %}
+              {% if r.capital_change > 0 %}+{% endif %}${{ "{:,.0f}".format(r.capital_change) }}
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:right;font-weight:700"
+              class="{% if r.curr_balance >= 0 %}text-green{% else %}text-red{% endif %}">
+            ${{ "{:,.0f}".format(r.curr_balance) }}
+          </td>
+          <td style="text-align:center" class="text-muted">{{ r.get('staff_name','—') or '—' }}</td>
+          <td style="text-align:center">
+            <span class="tx-type-badge tx-{{ r.type }}">{{ r.type }}</span>
+          </td>
+          <td style="text-align:center">
+            {% if not r.is_auto %}
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    onclick="openEdit({{ r.id }}, {{ r|tojson }})"
+                    title="編輯">
+              <i class="bi bi-pencil-fill text-blue" style="font-size:.75rem"></i>
+            </button>
+            {% else %}
+            <span class="text-muted" title="自動匯入" style="font-size:.7rem">自動</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-4 py-2 text-muted d-flex gap-4" style="font-size:.82rem;border-top:1px solid var(--border)">
+    <span>共 {{ rows|length }} 筆</span>
+    {% set total_in  = rows|sum(attribute='income') + rows|sum(attribute='other_income') %}
+    {% set total_out = rows|sum(attribute='outgoing') + rows|sum(attribute='op_expense') %}
+    <span class="text-green">期間總收入：${{ "{:,.0f}".format(total_in) }}</span>
+    <span class="text-red">期間總支出：${{ "{:,.0f}".format(total_out) }}</span>
+    {% if rows %}
+    <span class="fw-semibold">期末餘額：
+      <span class="{% if rows[-1].curr_balance >= 0 %}text-green{% else %}text-red{% endif %}">
+        ${{ "{:,.0f}".format(rows[0].curr_balance if sort_desc else rows[-1].curr_balance) }}
+      </span>
+    </span>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-journal-x text-muted"></i>
+    <div>此期間沒有交易記錄</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 新增 Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:500px">
+    <div class="modal-content" style="background:var(--bg-card);border-color:var(--border-bright)">
+      <form method="post" action="{{ url_for('ledger_transaction_new', date_from=date_from, date_to=date_to, type=type_filter, sort='desc' if sort_desc else 'asc') }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h6 class="modal-title">新增交易</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {{ _tx_fields('add') }}
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-sm btn-primary">新增</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:500px">
+    <div class="modal-content" style="background:var(--bg-card);border-color:var(--border-bright)">
+      <form id="editForm" method="post">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h6 class="modal-title">編輯交易</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {{ _tx_fields('edit') }}
+        </div>
+        <div class="modal-footer d-flex justify-content-between" style="border-color:var(--border)">
+          <form id="delForm" method="post" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定刪除？')">
+              <i class="bi bi-trash me-1"></i>刪除
+            </button>
+          </form>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="submit" form="editForm" class="btn btn-sm btn-primary">儲存</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% macro _tx_fields(prefix) %}
+<div class="row g-2 mb-3">
+  <div class="col-6">
+    <label class="form-label text-muted" style="font-size:.85rem">日期 <span class="text-red">*</span></label>
+    <input type="date" name="date" id="{{ prefix }}-date" class="form-control form-control-sm" required>
+  </div>
+  <div class="col-6">
+    <label class="form-label text-muted" style="font-size:.85rem">類型 <span class="text-red">*</span></label>
+    <select name="type" id="{{ prefix }}-type" class="form-select form-select-sm" onchange="updateFields('{{ prefix }}')">
+      {% for t in ['出款','回本','結清','利息','逾期','呆帳','營運支出','其他收入','資本增減'] %}
+      <option value="{{ t }}">{{ t }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+<div class="mb-3">
+  <label class="form-label text-muted" style="font-size:.85rem">項目說明 <span class="text-red">*</span></label>
+  <input type="text" name="item" id="{{ prefix }}-item" class="form-control form-control-sm" required placeholder="說明這筆交易">
+</div>
+<div class="row g-2 mb-3" id="{{ prefix }}-amt-row">
+  <div class="col-6" id="{{ prefix }}-outgoing-col">
+    <label class="form-label text-muted" style="font-size:.85rem">出款金額</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="outgoing" id="{{ prefix }}-outgoing" class="form-control" min="0" step="1" value="0">
+    </div>
+  </div>
+  <div class="col-6" id="{{ prefix }}-income-col">
+    <label class="form-label text-muted" style="font-size:.85rem">收款金額</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="income" id="{{ prefix }}-income" class="form-control" min="0" step="1" value="0">
+    </div>
+  </div>
+  <div class="col-6" id="{{ prefix }}-opex-col">
+    <label class="form-label text-muted" style="font-size:.85rem">營運支出</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="op_expense" id="{{ prefix }}-op_expense" class="form-control" min="0" step="1" value="0">
+    </div>
+  </div>
+  <div class="col-6" id="{{ prefix }}-other-col">
+    <label class="form-label text-muted" style="font-size:.85rem">其他收入</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="other_income" id="{{ prefix }}-other_income" class="form-control" min="0" step="1" value="0">
+    </div>
+  </div>
+  <div class="col-6" id="{{ prefix }}-cap-col">
+    <label class="form-label text-muted" style="font-size:.85rem">資本額異動（負=減少）</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="capital_change" id="{{ prefix }}-capital_change" class="form-control" step="1" value="0">
+    </div>
+  </div>
+</div>
+<div class="row g-2 mb-3">
+  <div class="col-6">
+    <label class="form-label text-muted" style="font-size:.85rem">建立者</label>
+    <select name="staff_id" id="{{ prefix }}-staff" class="form-select form-select-sm">
+      <option value="">— 不指定 —</option>
+      {% for s in staff_list %}
+      <option value="{{ s.id }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-6">
+    <label class="form-label text-muted" style="font-size:.85rem">備註</label>
+    <input type="text" name="notes" id="{{ prefix }}-notes" class="form-control form-control-sm" placeholder="選填">
+  </div>
+</div>
+{% endmacro %}
+
+{% block scripts %}
+<style>
+.tx-type-badge {
+  display:inline-block; padding:.1rem .45rem; border-radius:4px;
+  font-size:.72rem; font-weight:600; white-space:nowrap;
+}
+.tx-出款    { background:rgba(239,68,68,.18);  color:#f87171; }
+.tx-回本    { background:rgba(52,211,153,.18); color:#34d399; }
+.tx-結清    { background:rgba(52,211,153,.25); color:#4ade80; }
+.tx-利息    { background:rgba(56,189,248,.18); color:#38bdf8; }
+.tx-逾期    { background:rgba(251,191,36,.18); color:#fbbf24; }
+.tx-呆帳    { background:rgba(248,113,113,.18);color:#f87171; }
+.tx-營運支出{ background:rgba(251,191,36,.18); color:#fbbf24; }
+.tx-其他收入{ background:rgba(129,140,248,.18);color:#818cf8; }
+.tx-資本增減{ background:rgba(14,165,233,.18); color:#38bdf8; }
+
+@media print {
+  .sidebar, .topbar, .acct-tabs, form, .btn, .modal { display:none !important; }
+  .main-content { margin:0 !important; }
+  #txTable { font-size:.8rem; }
+}
+</style>
+<script>
+let addModal, editModal;
+document.addEventListener('DOMContentLoaded', () => {
+  addModal  = new bootstrap.Modal(document.getElementById('addModal'));
+  editModal = new bootstrap.Modal(document.getElementById('editModal'));
+  updateFields('add');
+  updateFields('edit');
+  document.getElementById('add-date').value = '{{ today }}';
+});
+
+function toggleSort() {
+  const inp = document.getElementById('sortInput');
+  inp.value = inp.value === 'desc' ? 'asc' : 'desc';
+  document.getElementById('sortBtn').textContent = inp.value === 'desc' ? '最新在上' : '最舊在上';
+  document.getElementById('filterForm').submit();
+}
+
+/* 根據類型顯示相關金額欄位 */
+const TYPE_FIELDS = {
+  '出款':    ['outgoing'],
+  '回本':    ['income'],
+  '結清':    ['income'],
+  '利息':    ['income'],
+  '逾期':    ['income'],
+  '呆帳':    [],
+  '營運支出': ['opex'],
+  '其他收入': ['other'],
+  '資本增減': ['cap'],
+};
+function updateFields(pfx) {
+  const type = document.getElementById(`${pfx}-type`).value;
+  const show = TYPE_FIELDS[type] || [];
+  const map = {
+    'outgoing': `${pfx}-outgoing-col`,
+    'income':   `${pfx}-income-col`,
+    'opex':     `${pfx}-opex-col`,
+    'other':    `${pfx}-other-col`,
+    'cap':      `${pfx}-cap-col`,
+  };
+  Object.entries(map).forEach(([key, colId]) => {
+    const el = document.getElementById(colId);
+    if (el) el.style.display = show.includes(key) ? '' : 'none';
+  });
+}
+
+function openAdd() { addModal.show(); }
+
+function openEdit(id, r) {
+  const p = 'edit';
+  document.getElementById('editForm').action =
+    `/ledger/transactions/${id}/edit?date_from={{ date_from }}&date_to={{ date_to }}&type={{ type_filter }}&sort={{ 'desc' if sort_desc else 'asc' }}`;
+  document.getElementById('delForm').action =
+    `/ledger/transactions/${id}/delete?date_from={{ date_from }}&date_to={{ date_to }}&type={{ type_filter }}&sort={{ 'desc' if sort_desc else 'asc' }}`;
+
+  document.getElementById(`${p}-date`).value         = r.date || '';
+  document.getElementById(`${p}-item`).value         = r.item || '';
+  document.getElementById(`${p}-type`).value         = r.type || '出款';
+  document.getElementById(`${p}-outgoing`).value     = r.outgoing || 0;
+  document.getElementById(`${p}-income`).value       = r.income || 0;
+  document.getElementById(`${p}-op_expense`).value   = r.op_expense || 0;
+  document.getElementById(`${p}-other_income`).value = r.other_income || 0;
+  document.getElementById(`${p}-capital_change`).value = r.capital_change || 0;
+  document.getElementById(`${p}-staff`).value        = r.staff_id || '';
+  document.getElementById(`${p}-notes`).value        = r.notes || '';
+  updateFields(p);
+  editModal.show();
+}
+</script>
+{% endblock %}

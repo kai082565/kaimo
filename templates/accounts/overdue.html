@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}帳務管理 — 逾期總覽{% endblock %}
+{% block page_title %}帳務管理{% endblock %}
+
+{% block content %}
+
+<!-- 頁內 Tab -->
+<div class="acct-tabs mb-4">
+  <a href="{{ url_for('accounts_overdue') }}" class="acct-tab active">
+    <i class="bi bi-clock-history me-1"></i>逾期總覽
+    {% if data.total_count > 0 %}
+      <span class="tab-badge">{{ data.total_count }}</span>
+    {% endif %}
+  </a>
+  <a href="{{ url_for('accounts_bad_debts') }}" class="acct-tab">
+    <i class="bi bi-exclamation-octagon me-1"></i>呆帳管理
+  </a>
+</div>
+
+<!-- 篩選列 -->
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <form method="get" id="filterForm" class="d-flex align-items-center gap-2">
+    <div class="input-group input-group-sm" style="width:220px">
+      <span class="input-group-text" style="background:rgba(0,0,0,.3);border-color:var(--border-bright)">
+        <i class="bi bi-search text-muted"></i>
+      </span>
+      <input type="text" name="q" class="form-control" placeholder="搜尋客戶姓名…"
+             value="{{ search }}" style="background:rgba(0,0,0,.3)">
+      <input type="hidden" name="date" id="dateHidden" value="{{ ref_date }}">
+    </div>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="shiftDate(-1)">
+      <i class="bi bi-chevron-left"></i>
+    </button>
+    <input type="date" id="datePicker" class="form-control form-control-sm" style="width:150px"
+           value="{{ ref_date }}" onchange="pickDate(this.value)">
+    <button type="button" class="btn btn-primary btn-sm px-3" onclick="pickDate('{{ today }}')">
+      今天
+    </button>
+    <button type="button" class="btn btn-outline-secondary btn-sm px-2" onclick="shiftDate(1)">
+      <i class="bi bi-chevron-right"></i>
+    </button>
+  </form>
+</div>
+
+<!-- 統計卡 -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">總逾期筆數</div>
+      <div class="fw-bold text-amber" style="font-size:1.9rem">{{ data.total_count }} 筆</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">總逾期金額</div>
+      <div class="fw-bold text-red" style="font-size:1.9rem">${{ "{:,.0f}".format(data.total_amount) }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">
+        {{ ref_date }} 新增逾期
+      </div>
+      <div class="fw-bold text-amber" style="font-size:1.9rem">{{ data.new_count }} 筆</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card p-3">
+      <div class="text-muted mb-1" style="font-size:.8rem">逾期回收率</div>
+      <div class="fw-bold {% if data.recovery_rate >= 60 %}text-green{% elif data.recovery_rate >= 30 %}text-amber{% else %}text-red{% endif %}"
+           style="font-size:1.9rem">{{ data.recovery_rate }}%</div>
+    </div>
+  </div>
+</div>
+
+<!-- 逾期清單 -->
+<div class="card p-0">
+  {% if data.records %}
+  <div style="overflow-x:auto">
+    <table class="table table-hover mb-0">
+      <colgroup>
+        <col style="width:14%">
+        <col style="width:12%">
+        <col style="width:10%">
+        <col style="width:12%">
+        <col style="width:15%">
+        <col style="width:8%">
+        <col style="width:15%">
+        <col style="width:14%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>客戶</th>
+          <th style="text-align:right">逾期金額</th>
+          <th style="text-align:right">逾期天數</th>
+          <th>產生日期</th>
+          <th style="text-align:center">聯絡狀態</th>
+          <th style="text-align:center">業務</th>
+          <th>當票</th>
+          <th style="text-align:center">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in data.records %}
+        <tr id="row-{{ r.id }}">
+          <td>
+            {% if r.customer_id %}
+              <a href="{{ url_for('customer_detail', customer_id=r.customer_id) }}" class="fw-semibold">
+                {{ r.customer_name or '—' }}
+              </a>
+              {% if r.customer_phone %}
+                <div class="text-muted" style="font-size:.75rem">{{ r.customer_phone }}</div>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">臨時客戶</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right" class="text-amber fw-semibold">
+            ${{ "{:,.0f}".format(r.interest) }}
+          </td>
+          <td style="text-align:right">
+            <span class="{% if r.overdue_days > 90 %}text-red{% else %}text-amber{% endif %} fw-semibold">
+              {{ r.overdue_days }} 天
+            </span>
+          </td>
+          <td class="text-muted">{{ r.due_date }}</td>
+          <td style="text-align:center">
+            <span class="contact-badge contact-{{ r.contact_status }}" id="cs-{{ r.id }}">
+              {{ r.contact_status }}
+            </span>
+          </td>
+          <td style="text-align:center" class="text-muted">
+            {{ (r.staff_name or '—')[0] if r.staff_name else '—' }}
+          </td>
+          <td>
+            <a href="{{ url_for('ticket_detail', ticket_id=r.ticket_id) }}"
+               class="text-muted" style="font-size:.82rem">
+              <i class="bi bi-ticket-perforated me-1"></i>#{{ r.ticket_id }}
+            </a>
+          </td>
+          <td style="text-align:center">
+            <div class="dropdown d-inline-block">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2 contact-btn"
+                      data-id="{{ r.id }}" data-bs-toggle="dropdown" title="更新聯絡狀態">
+                <i class="bi bi-telephone-fill text-blue"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end" style="min-width:140px;background:var(--bg-card-2);border-color:var(--border-bright)">
+                {% for st in ['未聯絡','已聯絡','約定還款','難以聯絡'] %}
+                <li>
+                  <button class="dropdown-item contact-option" data-id="{{ r.id }}" data-status="{{ st }}"
+                          style="font-size:.88rem;color:var(--text-main)">
+                    <span class="contact-dot contact-{{ st }}"></span> {{ st }}
+                  </button>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="px-4 py-2 text-muted" style="font-size:.82rem; border-top:1px solid var(--border)">
+    共 {{ data.records|length }} 筆逾期記錄
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-check2-circle text-green"></i>
+    <div>{% if search %}查無符合「{{ search }}」的逾期記錄{% else %}目前沒有逾期帳款{% endif %}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── 日期控制 ── */
+function pickDate(d) {
+  document.getElementById('datePicker').value = d;
+  document.getElementById('dateHidden').value = d;
+  document.getElementById('filterForm').submit();
+}
+function shiftDate(delta) {
+  const d = new Date(document.getElementById('datePicker').value);
+  d.setDate(d.getDate() + delta);
+  pickDate(d.toISOString().split('T')[0]);
+}
+document.getElementById('datePicker').addEventListener('change', function() {
+  pickDate(this.value);
+});
+
+/* ── 搜尋 Enter ── */
+document.querySelector('input[name="q"]').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('filterForm').submit();
+  }
+});
+
+/* ── 聯絡狀態更新 ── */
+document.querySelectorAll('.contact-option').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id     = btn.dataset.id;
+    const status = btn.dataset.status;
+    await fetch(`/api/accounts/contact/${id}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status})
+    });
+    const badge = document.getElementById(`cs-${id}`);
+    badge.textContent = status;
+    badge.className = `contact-badge contact-${status}`;
+  });
+});
+</script>
+{% endblock %}

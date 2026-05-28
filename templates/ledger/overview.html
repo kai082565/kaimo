@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}總帳報表 — 總覽{% endblock %}
+{% block page_title %}總帳報表{% endblock %}
+
+{% block content %}
+
+<!-- 頁內 Tab -->
+<div class="acct-tabs mb-4">
+  <a href="{{ url_for('ledger_overview') }}" class="acct-tab active">
+    <i class="bi bi-grid me-1"></i>總覽
+  </a>
+  <a href="{{ url_for('ledger_transactions') }}" class="acct-tab">
+    <i class="bi bi-list-ul me-1"></i>交易明細
+  </a>
+  <a href="{{ url_for('ledger_providers') }}" class="acct-tab">
+    <i class="bi bi-people-fill me-1"></i>資金提供方
+  </a>
+</div>
+
+<!-- 主要指標 -->
+<div class="row g-3 mb-4">
+
+  <!-- 資金規模 -->
+  <div class="col-12 col-lg-4">
+    <div class="card p-4 h-100" style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.08));border-color:rgba(99,102,241,.35)">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <span class="text-muted" style="font-size:.82rem">資金總規模</span>
+        <i class="bi bi-coin" style="color:#818cf8;font-size:1.1rem"></i>
+      </div>
+      <div class="fw-bold" style="font-size:2rem;color:#a5b4fc">
+        ${{ "{:,.0f}".format(data.total_principal) }}
+      </div>
+      <div class="text-muted mt-1" style="font-size:.78rem">
+        <i class="bi bi-ticket-perforated me-1"></i>{{ data.active_tickets }} 張活躍當票
+      </div>
+    </div>
+  </div>
+
+  <!-- 本月實收 -->
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100">
+      <div class="text-muted mb-1" style="font-size:.78rem">本月應收</div>
+      <div class="fw-bold text-amber" style="font-size:1.5rem">${{ "{:,.0f}".format(data.expected) }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100">
+      <div class="text-muted mb-1" style="font-size:.78rem">本月實收</div>
+      <div class="fw-bold text-green" style="font-size:1.5rem">${{ "{:,.0f}".format(data.collected) }}</div>
+      <div style="font-size:.75rem;color:{% if data.collection_rate>=80 %}#4ade80{% elif data.collection_rate>=50 %}#fbbf24{% else %}#f87171{% endif %}">
+        收款率 {{ data.collection_rate }}%
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100">
+      <div class="text-muted mb-1" style="font-size:.78rem">本月固定支出</div>
+      <div class="fw-bold text-red" style="font-size:1.5rem">${{ "{:,.0f}".format(data.fp_fixed) }}</div>
+      <div class="text-muted" style="font-size:.75rem">{{ data.fp_count }} 位提供方</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100" style="border-color:{% if data.net>=0 %}rgba(74,222,128,.3){% else %}rgba(248,113,113,.3){% endif %}">
+      <div class="text-muted mb-1" style="font-size:.78rem">本月淨利</div>
+      <div class="fw-bold {% if data.net>=0 %}text-green{% else %}text-red{% endif %}" style="font-size:1.5rem">
+        {% if data.net >= 0 %}+{% endif %}${{ "{:,.0f}".format(data.net) }}
+      </div>
+      <div class="text-muted" style="font-size:.75rem">實收 − 固定支出</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 圖表區 -->
+<div class="row g-3 mb-4">
+
+  <!-- 月度收支趨勢 -->
+  <div class="col-12 col-lg-8">
+    <div class="card p-4 h-100">
+      <div class="fw-semibold mb-3" style="font-size:.92rem">近 6 個月收款趨勢</div>
+      <div style="height:220px;position:relative">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 資金結構 -->
+  <div class="col-12 col-lg-4">
+    <div class="card p-4 h-100">
+      <div class="fw-semibold mb-3" style="font-size:.92rem">資金結構</div>
+      <div style="height:160px;position:relative">
+        <canvas id="fundChart"></canvas>
+      </div>
+      <div class="mt-3 d-flex flex-column gap-1" style="font-size:.78rem">
+        <div class="d-flex justify-content-between">
+          <span><span class="legend-dot" style="background:#818cf8"></span>外部資金投入</span>
+          <span class="fw-semibold">${{ "{:,.0f}".format(data.fp_income) }}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span><span class="legend-dot" style="background:#34d399"></span>外部資金已返還</span>
+          <span class="fw-semibold">${{ "{:,.0f}".format(data.fp_expense) }}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span><span class="legend-dot" style="background:#fbbf24"></span>外部資金淨曝險</span>
+          <span class="fw-semibold {% if data.fp_net>0 %}text-amber{% endif %}">${{ "{:,.0f}".format(data.fp_net) }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 風險摘要 -->
+<div class="row g-3">
+
+  <div class="col-12 col-lg-6">
+    <div class="card p-4" style="border-color:rgba(251,191,36,.25)">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-clock-history text-amber"></i>
+        <span class="fw-semibold" style="font-size:.92rem">逾期概況</span>
+      </div>
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.78rem">逾期筆數</div>
+          <div class="fw-bold text-amber" style="font-size:1.6rem">{{ data.overdue_count }} 筆</div>
+        </div>
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.78rem">逾期總額</div>
+          <div class="fw-bold text-amber" style="font-size:1.6rem">${{ "{:,.0f}".format(data.overdue_amount) }}</div>
+        </div>
+      </div>
+      {% if data.overdue_count > 0 %}
+      <div class="mt-3">
+        <a href="{{ url_for('accounts_overdue') }}" class="btn btn-sm btn-outline-secondary w-100">
+          <i class="bi bi-arrow-right me-1"></i>前往逾期總覽
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card p-4" style="border-color:rgba(248,113,113,.25)">
+      <div class="d-flex align-items-center gap-2 mb-3">
+        <i class="bi bi-exclamation-octagon text-red"></i>
+        <span class="fw-semibold" style="font-size:.92rem">呆帳概況</span>
+      </div>
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.78rem">呆帳筆數</div>
+          <div class="fw-bold text-red" style="font-size:1.6rem">{{ data.bad_count }} 筆</div>
+        </div>
+        <div class="col-6">
+          <div class="text-muted" style="font-size:.78rem">呆帳總額</div>
+          <div class="fw-bold text-red" style="font-size:1.6rem">${{ "{:,.0f}".format(data.bad_amount) }}</div>
+        </div>
+      </div>
+      {% if data.bad_count > 0 %}
+      <div class="mt-3">
+        <a href="{{ url_for('accounts_bad_debts') }}" class="btn btn-sm btn-outline-secondary w-100">
+          <i class="bi bi-arrow-right me-1"></i>前往呆帳管理
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+.legend-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
+</style>
+<script>
+const trend  = {{ data.trend | tojson }};
+const labels = trend.map(t => t.month.slice(5) + '月');
+
+/* ── 月度趨勢柱狀圖 ── */
+new Chart(document.getElementById('trendChart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: '應收',
+        data: trend.map(t => t.expected),
+        backgroundColor: 'rgba(251,191,36,.25)',
+        borderColor: 'rgba(251,191,36,.7)',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: '實收',
+        data: trend.map(t => t.collected),
+        backgroundColor: 'rgba(52,211,153,.3)',
+        borderColor: 'rgba(52,211,153,.8)',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#8ab5cc', font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` $${ctx.parsed.y.toLocaleString('zh-TW', {maximumFractionDigits:0})}`
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#8ab5cc', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,.05)' } },
+      y: {
+        ticks: {
+          color: '#8ab5cc', font: { size: 10 },
+          callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v)
+        },
+        grid: { color: 'rgba(255,255,255,.05)' }
+      }
+    }
+  }
+});
+
+/* ── 資金結構圓餅圖 ── */
+const fpIn  = {{ data.fp_income }};
+const fpOut = {{ data.fp_expense }};
+const fpNet = fpIn - fpOut;
+const selfFund = Math.max(0, {{ data.total_principal }} - fpNet);
+
+new Chart(document.getElementById('fundChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['自有資金', '外部資金淨曝險'],
+    datasets: [{
+      data: [selfFund, fpNet],
+      backgroundColor: ['rgba(56,189,248,.35)', 'rgba(129,140,248,.35)'],
+      borderColor:     ['rgba(56,189,248,.8)',  'rgba(129,140,248,.8)'],
+      borderWidth: 1.5,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '68%',
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` $${ctx.parsed.toLocaleString('zh-TW', {maximumFractionDigits:0})}`
+        }
+      }
+    }
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}業績排名{% endblock %}
+{% block page_title %}業績排名{% endblock %}
+
+{% block topbar_actions %}
+  <a href="{{ url_for('performance_export', year=year, month=month) }}"
+     class="btn btn-outline-success btn-sm">
+    <i class="bi bi-file-earmark-excel me-1"></i>匯出 Excel
+  </a>
+  <a href="{{ url_for('staff_list') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-person-badge me-1"></i>管理業務員
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- 期間選擇器 -->
+<div class="d-flex align-items-center gap-3 mb-4">
+  <form method="get" class="d-flex align-items-center gap-2">
+    <select name="year" class="form-select form-select-sm" style="width:100px" onchange="this.form.submit()">
+      {% for y in range(current_year, current_year - 4, -1) %}
+      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }} 年</option>
+      {% endfor %}
+    </select>
+    <select name="month" class="form-select form-select-sm" style="width:90px" onchange="this.form.submit()">
+      {% for m in range(1, 13) %}
+      <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }} 月</option>
+      {% endfor %}
+    </select>
+  </form>
+  <span class="text-muted" style="font-size:.85rem">
+    期間：{{ year }}/{{ "%02d"|format(month) }}/01 — {{ year }}/{{ "%02d"|format(month) }}/{{ [31,28,31,30,31,30,31,31,30,31,30,31][month-1] }}
+  </span>
+</div>
+
+<!-- 統計卡 -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="stat-card blue">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon blue"><i class="bi bi-trophy-fill"></i></div>
+        <div>
+          <div class="stat-value" style="font-size:1.4rem">{{ data.top_name }}</div>
+          <div class="stat-label">本月業績王</div>
+          <div style="font-size:.8rem; color:var(--text-muted)">
+            收 {{ "{:,.0f}".format(data.top_collected) }} 元
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card green">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon green"><i class="bi bi-people-fill"></i></div>
+        <div>
+          <div class="stat-value">{{ data.staff_count }}</div>
+          <div class="stat-label">業務人員數</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card amber">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon amber"><i class="bi bi-percent"></i></div>
+        <div>
+          <div class="stat-value">{{ data.avg_rate }}%</div>
+          <div class="stat-label">平均收款率</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="stat-card red">
+      <div class="d-flex align-items-center gap-3">
+        <div class="stat-icon red"><i class="bi bi-cash-coin"></i></div>
+        <div>
+          <div class="stat-value" style="font-size:1.5rem">{{ "{:,.0f}".format(data.total_collected) }}</div>
+          <div class="stat-label">本月總收款（元）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 排行榜 -->
+<div class="card p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="section-title mb-0"><i class="bi bi-bar-chart-steps me-1"></i>業績排行榜</div>
+    <a href="{{ url_for('performance_export', year=year, month=month) }}"
+       class="btn btn-outline-success btn-sm">
+      <i class="bi bi-file-earmark-excel me-1"></i>匯出報表
+    </a>
+  </div>
+
+  {% if data.ranking %}
+  <table class="table table-hover mb-0">
+    <colgroup>
+      <col style="width:6%">
+      <col style="width:12%">
+      <col style="width:14%">
+      <col style="width:14%">
+      <col style="width:12%">
+      <col style="width:8%">
+      <col style="width:10%">
+      <col style="width:10%">
+    </colgroup>
+    <thead>
+      <tr>
+        <th style="text-align:center">名次</th>
+        <th>業務</th>
+        <th style="text-align:right">票面金額</th>
+        <th style="text-align:right">實收利息</th>
+        <th style="text-align:right">收款率</th>
+        <th style="text-align:center">客戶數</th>
+        <th style="text-align:center">業績評級</th>
+        <th style="text-align:center">趨勢</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in data.ranking %}
+      <tr>
+        <td style="text-align:center">
+          {% if loop.index == 1 %}
+            <span class="fw-bold text-amber" style="font-size:1.1rem">🥇</span>
+          {% elif loop.index == 2 %}
+            <span class="fw-bold" style="color:#94a3b8;font-size:1.1rem">🥈</span>
+          {% elif loop.index == 3 %}
+            <span class="fw-bold" style="color:#b87333;font-size:1.1rem">🥉</span>
+          {% else %}
+            <span class="text-muted">{{ loop.index }}</span>
+          {% endif %}
+        </td>
+        <td>
+          <div class="fw-semibold">{{ r.name }}</div>
+          {% if r.phone %}<div class="text-muted" style="font-size:.78rem">{{ r.phone }}</div>{% endif %}
+        </td>
+        <td style="text-align:right">{{ "{:,.0f}".format(r.principal) }}</td>
+        <td style="text-align:right" class="text-green fw-semibold">{{ "{:,.0f}".format(r.collected) }}</td>
+        <td style="text-align:right">
+          <div class="d-flex align-items-center justify-content-end gap-2">
+            <div style="flex:1; background:var(--border); border-radius:4px; height:6px; max-width:80px">
+              <div style="width:{{ [r.collection_rate, 100]|min }}%; background:
+                {% if r.collection_rate >= 90 %}var(--green)
+                {% elif r.collection_rate >= 75 %}var(--blue)
+                {% elif r.collection_rate >= 60 %}var(--amber)
+                {% else %}var(--red){% endif %};
+                height:6px; border-radius:4px"></div>
+            </div>
+            <span class="{% if r.collection_rate >= 90 %}text-green{% elif r.collection_rate >= 60 %}text-amber{% else %}text-red{% endif %}">
+              {{ r.collection_rate }}%
+            </span>
+          </div>
+        </td>
+        <td style="text-align:center">{{ r.customer_count }}</td>
+        <td style="text-align:center">
+          <span class="status-badge
+            {% if r.grade == 'A' %}badge-active
+            {% elif r.grade == 'B' %}badge-redeemed
+            {% elif r.grade == 'C' %}badge-overdue
+            {% else %}badge-forfeited{% endif %}">
+            {{ r.grade }}
+          </span>
+        </td>
+        <td style="text-align:center">
+          {% if r.trend == 'up' %}
+            <span class="text-green fw-bold" title="較上月上升">
+              <i class="bi bi-arrow-up-circle-fill"></i>
+            </span>
+          {% elif r.trend == 'down' %}
+            <span class="text-red fw-bold" title="較上月下降">
+              <i class="bi bi-arrow-down-circle-fill"></i>
+            </span>
+          {% else %}
+            <span class="text-muted" title="與上月持平">
+              <i class="bi bi-dash-circle"></i>
+            </span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-trophy"></i>
+    <div>本月尚無業績資料</div>
+    <div style="font-size:.85rem; margin-top:.5rem">
+      請先至「<a href="{{ url_for('staff_list') }}">業務員管理</a>」新增業務員，並在開立當票時選擇負責業務員。
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

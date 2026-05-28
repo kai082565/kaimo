@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}總帳報表 — 資金提供方{% endblock %}
+{% block page_title %}總帳報表{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('ledger_providers_export') }}" class="btn btn-sm btn-outline-secondary">
+  <i class="bi bi-download me-1"></i>匯出報表
+</a>
+<button class="btn btn-sm btn-primary" onclick="openAdd()">
+  <i class="bi bi-plus-lg me-1"></i>新增提供方
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- 頁內 Tab -->
+<div class="acct-tabs mb-4">
+  <a href="{{ url_for('ledger_overview') }}" class="acct-tab">
+    <i class="bi bi-grid me-1"></i>總覽
+  </a>
+  <a href="{{ url_for('ledger_transactions') }}" class="acct-tab">
+    <i class="bi bi-list-ul me-1"></i>交易明細
+  </a>
+  <a href="{{ url_for('ledger_providers') }}" class="acct-tab active">
+    <i class="bi bi-people-fill me-1"></i>資金提供方
+  </a>
+</div>
+
+<!-- 區塊標題 -->
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h6 class="mb-0" style="background:linear-gradient(90deg,#f472b6,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:1rem;font-weight:700">
+    資金提供方管理
+  </h6>
+</div>
+
+<!-- 清單 -->
+<div class="card p-0">
+  {% if providers %}
+  <div style="overflow-x:auto">
+    <table class="table table-hover mb-0">
+      <colgroup>
+        <col style="width:16%">
+        <col style="width:16%">
+        <col style="width:12%">
+        <col style="width:12%">
+        <col style="width:12%">
+        <col style="width:12%">
+        <col style="width:14%">
+        <col style="width:6%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>時間</th>
+          <th>名字</th>
+          <th style="text-align:right">收入</th>
+          <th style="text-align:right">支出</th>
+          <th style="text-align:right">固定金額</th>
+          <th style="text-align:center">建立者</th>
+          <th>備註</th>
+          <th style="text-align:center">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in providers %}
+        <tr id="fp-row-{{ p.id }}">
+          <td class="text-muted" style="font-size:.85rem">{{ p.created_at[:16] }}</td>
+          <td class="fw-semibold">{{ p.name }}</td>
+          <td style="text-align:right" class="text-green fw-semibold">
+            {% if p.income %} ${{ "{:,.0f}".format(p.income) }} {% else %} — {% endif %}
+          </td>
+          <td style="text-align:right" class="text-red fw-semibold">
+            {% if p.expense %} ${{ "{:,.0f}".format(p.expense) }} {% else %} — {% endif %}
+          </td>
+          <td style="text-align:right" class="text-amber fw-semibold">
+            {% if p.fixed_amount %} ${{ "{:,.0f}".format(p.fixed_amount) }}/月 {% else %} — {% endif %}
+          </td>
+          <td style="text-align:center" class="text-muted">{{ p.staff_name or '—' }}</td>
+          <td class="text-muted" style="font-size:.85rem">{{ p.notes or '—' }}</td>
+          <td style="text-align:center">
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    onclick="openEdit({{ p.id }}, {{ p.name|tojson }}, {{ p.income }}, {{ p.expense }}, {{ p.fixed_amount }}, {{ (p.staff_id or '')|tojson }}, {{ (p.notes or '')|tojson }})"
+                    title="編輯">
+              <i class="bi bi-pencil-fill text-blue"></i>
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="border-top:2px solid var(--border-bright);font-weight:600">
+          <td colspan="2" class="text-muted" style="font-size:.82rem">合計 {{ providers|length }} 筆</td>
+          <td style="text-align:right" class="text-green">
+            ${{ "{:,.0f}".format(providers|sum(attribute='income')) }}
+          </td>
+          <td style="text-align:right" class="text-red">
+            ${{ "{:,.0f}".format(providers|sum(attribute='expense')) }}
+          </td>
+          <td style="text-align:right" class="text-amber">
+            ${{ "{:,.0f}".format(providers|sum(attribute='fixed_amount')) }}/月
+          </td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="bi bi-people text-muted"></i>
+    <div>暫無資金提供方交易記錄</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 新增 Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+    <div class="modal-content" style="background:var(--bg-card);border-color:var(--border-bright)">
+      <form method="post" action="{{ url_for('ledger_provider_new') }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h6 class="modal-title">新增資金提供方</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {{ _form_fields(staff_list) }}
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-sm btn-primary">新增</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:460px">
+    <div class="modal-content" style="background:var(--bg-card);border-color:var(--border-bright)">
+      <form id="editForm" method="post">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h6 class="modal-title">編輯資金提供方</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          {{ _form_fields(staff_list, edit=true) }}
+        </div>
+        <div class="modal-footer d-flex justify-content-between" style="border-color:var(--border)">
+          <form id="delForm" method="post" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('確定刪除？')">
+              <i class="bi bi-trash me-1"></i>刪除
+            </button>
+          </form>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+            <button type="submit" form="editForm" class="btn btn-sm btn-primary">儲存</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% macro _form_fields(staff_list, edit=false) %}
+<div class="mb-3">
+  <label class="form-label text-muted" style="font-size:.85rem">名字 <span class="text-red">*</span></label>
+  <input type="text" name="name" id="{{ 'edit-name' if edit else 'add-name' }}"
+         class="form-control" required placeholder="資金提供方姓名">
+</div>
+<div class="row g-2 mb-3">
+  <div class="col">
+    <label class="form-label text-muted" style="font-size:.85rem">收入</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="income" id="{{ 'edit-income' if edit else 'add-income' }}"
+             class="form-control" min="0" step="1" placeholder="0">
+    </div>
+  </div>
+  <div class="col">
+    <label class="form-label text-muted" style="font-size:.85rem">支出</label>
+    <div class="input-group input-group-sm">
+      <span class="input-group-text">$</span>
+      <input type="number" name="expense" id="{{ 'edit-expense' if edit else 'add-expense' }}"
+             class="form-control" min="0" step="1" placeholder="0">
+    </div>
+  </div>
+</div>
+<div class="mb-3">
+  <label class="form-label text-muted" style="font-size:.85rem">固定金額（每月）</label>
+  <div class="input-group input-group-sm">
+    <span class="input-group-text">$</span>
+    <input type="number" name="fixed_amount" id="{{ 'edit-fixed' if edit else 'add-fixed' }}"
+           class="form-control" min="0" step="1" placeholder="每月固定回報">
+    <span class="input-group-text">/月</span>
+  </div>
+</div>
+<div class="mb-3">
+  <label class="form-label text-muted" style="font-size:.85rem">建立者</label>
+  <select name="staff_id" id="{{ 'edit-staff' if edit else 'add-staff' }}" class="form-select form-select-sm">
+    <option value="">— 不指定 —</option>
+    {% for s in staff_list %}
+    <option value="{{ s.id }}">{{ s.name }}</option>
+    {% endfor %}
+  </select>
+</div>
+<div class="mb-1">
+  <label class="form-label text-muted" style="font-size:.85rem">備註</label>
+  <textarea name="notes" id="{{ 'edit-notes' if edit else 'add-notes' }}"
+            class="form-control" rows="2" placeholder="選填…"></textarea>
+</div>
+{% endmacro %}
+
+{% block scripts %}
+<script>
+let addModal, editModal;
+document.addEventListener('DOMContentLoaded', () => {
+  addModal  = new bootstrap.Modal(document.getElementById('addModal'));
+  editModal = new bootstrap.Modal(document.getElementById('editModal'));
+});
+
+function openAdd() { addModal.show(); }
+
+function openEdit(id, name, income, expense, fixed, staffId, notes) {
+  document.getElementById('editForm').action = `/ledger/providers/${id}/edit`;
+  document.getElementById('delForm').action  = `/ledger/providers/${id}/delete`;
+  document.getElementById('edit-name').value    = name;
+  document.getElementById('edit-income').value  = income;
+  document.getElementById('edit-expense').value = expense;
+  document.getElementById('edit-fixed').value   = fixed;
+  document.getElementById('edit-notes').value   = notes;
+  const sel = document.getElementById('edit-staff');
+  sel.value = staffId || '';
+  editModal.show();
+}
+</script>
+{% endblock %}

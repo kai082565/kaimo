@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}業務員管理{% endblock %}
+{% block page_title %}業務員管理{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addModal">
+    <i class="bi bi-plus-lg me-1"></i>新增業務員
+  </button>
+  <a href="{{ url_for('performance') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-trophy me-1"></i>業績排名
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card p-4">
+      {% if staff_list %}
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>姓名</th>
+            <th>電話</th>
+            <th>加入日期</th>
+            <th style="text-align:right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for s in staff_list %}
+          <tr>
+            <td class="fw-semibold">{{ s.name }}</td>
+            <td class="text-muted">{{ s.phone or '—' }}</td>
+            <td class="text-muted">{{ s.created_at[:10] }}</td>
+            <td style="text-align:right">
+              <button class="btn btn-outline-secondary btn-sm py-0 px-2"
+                      onclick="openEdit({{ s.id }}, '{{ s.name }}', '{{ s.phone or '' }}')">
+                編輯
+              </button>
+              <form method="post" action="{{ url_for('staff_delete', staff_id=s.id) }}"
+                    style="display:inline"
+                    onsubmit="return confirm('確定刪除「{{ s.name }}」？刪除後其當票業務員欄位將清空。')">
+                <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2">刪除</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <i class="bi bi-person-badge"></i>
+        <div>尚未建立任何業務員</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card p-4">
+      <div class="section-title"><i class="bi bi-info-circle me-1"></i>說明</div>
+      <div style="font-size:.9rem; color:var(--text-sub); line-height:1.9">
+        <p class="mb-2">新增業務員後，在<strong>開立當票</strong>或<strong>編輯當票</strong>時可選擇負責業務員。</p>
+        <p class="mb-2">業績排名根據各業務員負責的當票，統計本月<span class="text-amber">應收利息</span>與<span class="text-green">實收利息</span>，計算收款率。</p>
+        <p class="mb-0 text-muted">刪除業務員不會刪除其歷史資料，只會清空當票上的業務員欄位。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新增 Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('staff_new') }}">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h5 class="modal-title"><i class="bi bi-person-plus me-2 text-blue"></i>新增業務員</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">姓名 <span class="text-red">*</span></label>
+            <input type="text" name="name" class="form-control" required placeholder="業務員姓名">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">電話</label>
+            <input type="text" name="phone" class="form-control" placeholder="選填">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">新增</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯 Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="editForm" method="post">
+        <div class="modal-header" style="border-color:var(--border)">
+          <h5 class="modal-title"><i class="bi bi-pencil me-2 text-amber"></i>編輯業務員</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">姓名 <span class="text-red">*</span></label>
+            <input type="text" id="editName" name="name" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">電話</label>
+            <input type="text" id="editPhone" name="phone" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-color:var(--border)">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-warning">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openEdit(id, name, phone) {
+  document.getElementById('editName').value = name;
+  document.getElementById('editPhone').value = phone;
+  document.getElementById('editForm').action = `/staff/${id}/edit`;
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+</script>
+{% endblock %}
