@@ -252,27 +252,6 @@ def edit_customer(customer_id):
                            customer=customer, action="edit")
 
 
-# ── 報表 ──────────────────────────────────────────────
-
-@app.route("/reports")
-def reports():
-    year = int(request.args.get("year", date.today().year))
-    monthly = db.report_monthly(year)
-    categories = db.report_category()
-    status_count = db.report_status_count()
-    return render_template("reports.html",
-                           year=year,
-                           monthly=monthly,
-                           categories=categories,
-                           status_count=status_count,
-                           current_year=date.today().year)
-
-
-@app.route("/api/reports/monthly")
-def api_monthly():
-    year = int(request.args.get("year", date.today().year))
-    return jsonify(db.report_monthly(year))
-
 
 @app.route("/api/interest/<int:ticket_id>")
 def api_interest(ticket_id):
