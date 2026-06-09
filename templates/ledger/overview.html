@@ -20,52 +20,64 @@
 <!-- 主要指標 -->
 <div class="row g-3 mb-4">
 
-  <!-- 資金規模 -->
-  <div class="col-12 col-lg-4">
-    <div class="card p-4 h-100" style="background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.08));border-color:rgba(99,102,241,.35)">
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <span class="text-muted" style="font-size:.82rem">資金總規模</span>
-        <i class="bi bi-coin" style="color:#818cf8;font-size:1.1rem"></i>
-      </div>
-      <div class="fw-bold" style="font-size:2rem;color:#a5b4fc">
-        ${{ "{:,.0f}".format(data.total_principal) }}
-      </div>
-      <div class="text-muted mt-1" style="font-size:.78rem">
-        <i class="bi bi-ticket-perforated me-1"></i>{{ data.active_tickets }} 張活躍當票
+  <!-- 當票本金 -->
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100" style="border-color:rgba(99,102,241,.35)">
+      <div class="text-muted mb-1" style="font-size:.78rem">當票本金</div>
+      <div class="fw-bold" style="font-size:1.5rem;color:#a5b4fc">${{ "{:,.0f}".format(data.total_principal) }}</div>
+      <div class="text-muted" style="font-size:.72rem">
+        <i class="bi bi-ticket-perforated me-1"></i>{{ data.active_tickets }} 張活躍
       </div>
     </div>
   </div>
 
-  <!-- 本月實收 -->
+  <!-- 外部資金淨額 -->
+  <div class="col-6 col-lg-2">
+    <div class="card p-3 h-100" style="border-color:rgba(56,189,248,.35)">
+      <div class="text-muted mb-1" style="font-size:.78rem">外部資金淨額</div>
+      <div class="fw-bold text-blue" style="font-size:1.5rem">${{ "{:,.0f}".format(data.fp_net) }}</div>
+      <div class="text-muted" style="font-size:.72rem">
+        <i class="bi bi-people me-1"></i>{{ data.fp_count }} 位提供方
+      </div>
+    </div>
+  </div>
+
+  <!-- 本月應收 -->
   <div class="col-6 col-lg-2">
     <div class="card p-3 h-100">
       <div class="text-muted mb-1" style="font-size:.78rem">本月應收</div>
       <div class="fw-bold text-amber" style="font-size:1.5rem">${{ "{:,.0f}".format(data.expected) }}</div>
     </div>
   </div>
+
+  <!-- 本月實收 -->
   <div class="col-6 col-lg-2">
     <div class="card p-3 h-100">
       <div class="text-muted mb-1" style="font-size:.78rem">本月實收</div>
       <div class="fw-bold text-green" style="font-size:1.5rem">${{ "{:,.0f}".format(data.collected) }}</div>
-      <div style="font-size:.75rem;color:{% if data.collection_rate>=80 %}#4ade80{% elif data.collection_rate>=50 %}#fbbf24{% else %}#f87171{% endif %}">
+      <div style="font-size:.72rem;color:{% if data.collection_rate>=80 %}#4ade80{% elif data.collection_rate>=50 %}#fbbf24{% else %}#f87171{% endif %}">
         收款率 {{ data.collection_rate }}%
       </div>
     </div>
   </div>
+
+  <!-- 本月固定支出 -->
   <div class="col-6 col-lg-2">
     <div class="card p-3 h-100">
       <div class="text-muted mb-1" style="font-size:.78rem">本月固定支出</div>
       <div class="fw-bold text-red" style="font-size:1.5rem">${{ "{:,.0f}".format(data.fp_fixed) }}</div>
-      <div class="text-muted" style="font-size:.75rem">{{ data.fp_count }} 位提供方</div>
+      <div class="text-muted" style="font-size:.72rem">提供方月回報</div>
     </div>
   </div>
+
+  <!-- 本月淨利 -->
   <div class="col-6 col-lg-2">
     <div class="card p-3 h-100" style="border-color:{% if data.net>=0 %}rgba(74,222,128,.3){% else %}rgba(248,113,113,.3){% endif %}">
       <div class="text-muted mb-1" style="font-size:.78rem">本月淨利</div>
       <div class="fw-bold {% if data.net>=0 %}text-green{% else %}text-red{% endif %}" style="font-size:1.5rem">
         {% if data.net >= 0 %}+{% endif %}${{ "{:,.0f}".format(data.net) }}
       </div>
-      <div class="text-muted" style="font-size:.75rem">實收 − 固定支出</div>
+      <div class="text-muted" style="font-size:.72rem">實收 − 固定支出</div>
     </div>
   </div>
 
