@@ -3,9 +3,11 @@ import sys
 import threading
 import webbrowser
 from datetime import date
+from functools import wraps
 
 from flask import (Flask, render_template, request, redirect,
-                   url_for, jsonify, flash, send_file)
+                   url_for, jsonify, flash, send_file, session)
+from werkzeug.security import check_password_hash
 
 import database as db
 
@@ -21,6 +23,102 @@ app = Flask(__name__,
             static_folder=_resource('static'))
 app.secret_key = "pawnshop-2024"
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+
+# ── 認證工具 ──────────────────────────────────────────
+
+# 業務角色允許存取的頁面
+_STAFF_ALLOWED = {
+    'tickets_monthly', 'tickets_unpaid',
+    'new_ticket', 'ticket_detail',
+    'customers', 'customer_detail', 'edit_customer',
+    'api_interest', 'logout', 'static', 'settings',
+    'blacklist',
+}
+
+
+def _current_staff_id():
+    """若目前登入者是業務，回傳其 staff_id；否則回傳 None（不篩選）"""
+    if session.get('role') == '業務':
+        return session.get('staff_id')
+    return None
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.before_request
+def check_auth():
+    if request.endpoint == 'static':
+        return
+    if not db.has_any_user():
+        if request.endpoint != 'setup':
+            return redirect(url_for('setup'))
+        return
+    if request.endpoint in ('login', 'logout', 'setup'):
+        return
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    if session.get('role') == '業務' and request.endpoint not in _STAFF_ALLOWED:
+        return redirect(url_for('tickets_monthly'))
+
+
+# ── 認證路由 ──────────────────────────────────────────
+
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    if db.has_any_user():
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        if not username or not password:
+            flash('帳號和密碼不能為空', 'danger')
+            return render_template('auth/setup.html')
+        if password != confirm_password:
+            flash('兩次密碼不一致，請重新輸入', 'danger')
+            return render_template('auth/setup.html')
+        if len(password) < 4:
+            flash('密碼至少需要 4 個字元', 'danger')
+            return render_template('auth/setup.html')
+        db.create_user({'username': username, 'password': password, 'role': '老闆'})
+        flash('老闆帳號建立成功，請登入！', 'success')
+        return redirect(url_for('login'))
+    return render_template('auth/setup.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if 'user_id' in session:
+        role = session.get('role')
+        return redirect(url_for('tickets_monthly') if role == '業務' else url_for('dashboard'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        user = db.get_user_by_username(username)
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id']  = user['id']
+            session['username'] = user['username']
+            session['role']     = user['role']
+            session['staff_id'] = user['staff_id']
+            if user['role'] == '業務':
+                return redirect(url_for('tickets_monthly'))
+            return redirect(url_for('dashboard'))
+        flash('帳號或密碼錯誤', 'danger')
+    return render_template('auth/login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 
 # ── 工具 ──────────────────────────────────────────────
@@ -64,7 +162,7 @@ def tickets():
 
 @app.route("/tickets/monthly")
 def tickets_monthly():
-    rows = db.list_tickets_monthly()
+    rows = db.list_tickets_monthly(staff_id=_current_staff_id())
     return render_template("tickets/list.html",
                            tickets=rows,
                            page_title="當月應收",
@@ -73,7 +171,7 @@ def tickets_monthly():
 
 @app.route("/tickets/unpaid")
 def tickets_unpaid():
-    rows = db.list_tickets_unpaid()
+    rows = db.list_tickets_unpaid(staff_id=_current_staff_id())
     return render_template("tickets/list.html",
                            tickets=rows,
                            page_title="應收未收",
@@ -88,6 +186,8 @@ def new_ticket():
 
     if request.method == "POST":
         data = request.form.to_dict()
+        if session.get('role') == '業務':
+            data['staff_id'] = session.get('staff_id')
         cid = db.create_customer({
             "name":    data.get("customer_name", "").strip(),
             "id_card": data.get("customer_id_card", "").strip(),
@@ -112,7 +212,10 @@ def ticket_detail(ticket_id):
     ticket = db.get_ticket(ticket_id)
     if not ticket:
         flash("找不到該當票", "danger")
-        return redirect(url_for("tickets"))
+        return redirect(url_for("tickets_monthly"))
+    if session.get('role') == '業務' and ticket.get('staff_id') != session.get('staff_id'):
+        flash("無權限查看此當票", "danger")
+        return redirect(url_for("tickets_monthly"))
     return render_template("tickets/detail.html",
                            ticket=ticket,
                            today=_today())
@@ -216,10 +319,9 @@ def cancel_repayment(ticket_id, schedule_id):
 @app.route("/customers")
 def customers():
     search = request.args.get("q", "")
-    rows = db.list_customers(search or None)
+    rows = db.list_customers(search or None, staff_id=_current_staff_id())
     return render_template("customers/list.html",
                            customers=rows, search=search)
-
 
 
 @app.route("/customers/<int:customer_id>")
@@ -228,12 +330,19 @@ def customer_detail(customer_id):
     if not customer:
         flash("找不到該客戶", "danger")
         return redirect(url_for("customers"))
+    if session.get('role') == '業務':
+        sid = session.get('staff_id')
+        if not any(t.get('staff_id') == sid for t in customer.get('tickets', [])):
+            flash("無權限查看此客戶", "danger")
+            return redirect(url_for("customers"))
     return render_template("customers/detail.html",
                            customer=customer, today=_today())
 
 
 @app.route("/customers/<int:customer_id>/delete", methods=["POST"])
 def delete_customer(customer_id):
+    if session.get('role') == '業務':
+        return redirect(url_for("customers"))
     db.delete_customer(customer_id)
     flash("客戶已刪除。", "success")
     return redirect(url_for("customers"))
@@ -244,6 +353,11 @@ def edit_customer(customer_id):
     customer = db.get_customer(customer_id)
     if not customer:
         return redirect(url_for("customers"))
+    if session.get('role') == '業務':
+        sid = session.get('staff_id')
+        if not any(t.get('staff_id') == sid for t in customer.get('tickets', [])):
+            flash("無權限編輯此客戶", "danger")
+            return redirect(url_for("customers"))
     if request.method == "POST":
         db.update_customer(customer_id, request.form.to_dict())
         flash("客戶資料已更新！", "success")
@@ -273,44 +387,20 @@ def api_interest(ticket_id):
     })
 
 
-# ── 業務員 ────────────────────────────────────────────
-
-@app.route("/staff")
-def staff_list():
-    rows = db.get_staff_list()
-    return render_template("staff.html", staff_list=rows)
-
-
-@app.route("/staff/new", methods=["POST"])
-def staff_new():
-    db.create_staff(request.form.to_dict())
-    flash("業務員已新增！", "success")
-    return redirect(url_for("staff_list"))
-
-
-@app.route("/staff/<int:staff_id>/edit", methods=["POST"])
-def staff_edit(staff_id):
-    db.update_staff(staff_id, request.form.to_dict())
-    flash("業務員資料已更新！", "success")
-    return redirect(url_for("staff_list"))
-
-
-@app.route("/staff/<int:staff_id>/delete", methods=["POST"])
-def staff_delete(staff_id):
-    db.delete_staff(staff_id)
-    flash("業務員已刪除。", "success")
-    return redirect(url_for("staff_list"))
 
 
 # ── 業績排名 ──────────────────────────────────────────
 
 @app.route("/performance")
 def performance():
+    import calendar
     year  = int(request.args.get("year",  date.today().year))
     month = int(request.args.get("month", date.today().month))
     data  = db.get_performance_ranking(year, month)
+    last_day = calendar.monthrange(year, month)[1]
     return render_template("performance.html",
                            data=data, year=year, month=month,
+                           last_day=last_day,
                            current_year=date.today().year,
                            current_month=date.today().month)
 
@@ -587,8 +677,25 @@ def ledger_providers_export():
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
+        action = request.form.get("_action", "")
+        if action == "change_password":
+            old_pw = request.form.get("old_password", "")
+            new_pw = request.form.get("new_password", "")
+            confirm_pw = request.form.get("confirm_password", "")
+            user = db.get_user(session['user_id'])
+            from werkzeug.security import check_password_hash
+            if not check_password_hash(user['password_hash'], old_pw):
+                flash("舊密碼錯誤", "danger")
+            elif new_pw != confirm_pw:
+                flash("新密碼與確認密碼不符", "danger")
+            elif len(new_pw) < 4:
+                flash("密碼至少需要 4 個字元", "danger")
+            else:
+                db.update_user_password(session['user_id'], new_pw)
+                flash("密碼已更新！", "success")
+            return redirect(url_for("settings"))
+        # 一般設定儲存
         db.save_settings(request.form.to_dict())
-        # 更新分類利率
         categories = db.get_categories()
         with db.get_conn() as conn:
             for cat in categories:
@@ -603,7 +710,115 @@ def settings():
         return redirect(url_for("settings"))
     cfg = db.get_settings()
     categories = db.get_categories()
-    return render_template("settings.html", cfg=cfg, categories=categories)
+    users = db.list_users() if session.get('role') == '老闆' else []
+    staff_list = db.get_staff_list() if session.get('role') == '老闆' else []
+    return render_template("settings.html", cfg=cfg, categories=categories,
+                           users=users, staff_list=staff_list)
+
+
+@app.route("/settings/users/new", methods=["POST"])
+def settings_user_new():
+    if session.get('role') != '老闆':
+        return redirect(url_for('settings'))
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
+    role = request.form.get('role', '')
+    if not username or not password or role not in ('業務', '會計'):
+        flash("請填寫完整資料", "danger")
+        return redirect(url_for('settings'))
+    if len(password) < 4:
+        flash("密碼至少需要 4 個字元", "danger")
+        return redirect(url_for('settings'))
+    try:
+        db.create_user(request.form.to_dict())
+        flash(f"帳號「{username}」已新增！", "success")
+    except Exception:
+        flash("帳號名稱已存在，請換一個", "danger")
+    return redirect(url_for('settings'))
+
+
+@app.route("/settings/users/<int:user_id>/edit", methods=["POST"])
+def settings_user_edit(user_id):
+    if session.get('role') != '老闆':
+        return redirect(url_for('settings'))
+    db.update_user(user_id, request.form.to_dict())
+    flash("帳號已更新！", "success")
+    return redirect(url_for('settings'))
+
+
+@app.route("/settings/users/<int:user_id>/delete", methods=["POST"])
+def settings_user_delete(user_id):
+    if session.get('role') != '老闆':
+        return redirect(url_for('settings'))
+    if user_id == session['user_id']:
+        flash("不能刪除自己的帳號", "danger")
+        return redirect(url_for('settings'))
+    db.delete_user(user_id)
+    flash("帳號已刪除。", "success")
+    return redirect(url_for('settings'))
+
+
+# ── 黑名單 ────────────────────────────────────────────
+
+@app.route("/blacklist")
+def blacklist():
+    search = request.args.get("q", "")
+    rows = db.list_blacklist(search or None)
+    return render_template("blacklist.html", rows=rows, search=search)
+
+
+@app.route("/blacklist/new", methods=["POST"])
+def blacklist_new():
+    if session.get('role') not in ('老闆', '會計'):
+        return redirect(url_for('blacklist'))
+    db.create_blacklist(request.form.to_dict())
+    flash("已加入黑名單！", "success")
+    return redirect(url_for('blacklist'))
+
+
+@app.route("/blacklist/<int:bid>/delete", methods=["POST"])
+def blacklist_delete(bid):
+    if session.get('role') not in ('老闆', '會計'):
+        return redirect(url_for('blacklist'))
+    db.delete_blacklist(bid)
+    flash("已從黑名單移除。", "success")
+    return redirect(url_for('blacklist'))
+
+
+@app.route("/blacklist/import", methods=["POST"])
+def blacklist_import():
+    if session.get('role') not in ('老闆', '會計'):
+        return redirect(url_for('blacklist'))
+    import io
+    import openpyxl
+    f = request.files.get('file')
+    if not f or not f.filename.endswith(('.xlsx', '.xls')):
+        flash("請上傳 .xlsx 格式的 Excel 檔案", "danger")
+        return redirect(url_for('blacklist'))
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()), data_only=True)
+        ws = wb.active
+        ok = skip = 0
+        for i, row in enumerate(ws.iter_rows(values_only=True), 1):
+            if i == 1:
+                continue  # 跳過標題列
+            name = str(row[0]).strip() if row[0] else ""
+            if not name or name == "None":
+                skip += 1
+                continue
+            id_card = str(row[1]).strip() if row[1] else ""
+            phone   = str(row[2]).strip() if row[2] else ""
+            reason  = str(row[3]).strip() if row[3] else ""
+            notes   = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+            if reason not in ('詢問', '呆帳'):
+                reason = '詢問'
+            db.create_blacklist({'name': name, 'id_card': id_card,
+                                 'phone': phone, 'reason': reason, 'notes': notes})
+            ok += 1
+        flash(f"匯入完成：成功 {ok} 筆，略過空白列 {skip} 筆。", "success")
+    except Exception as e:
+        flash(f"匯入失敗：{e}", "danger")
+    return redirect(url_for('blacklist'))
 
 
 # ── 啟動 ──────────────────────────────────────────────
@@ -617,6 +832,7 @@ if __name__ == "__main__":
     port = 5678
     # debug=True 讓程式碼和模板變更後自動重載，F5 即可看到效果
     # WERKZEUG_RUN_MAIN 判斷避免瀏覽器開兩次
+    is_frozen = getattr(sys, 'frozen', False)
     if not os.environ.get("NO_BROWSER") and not os.environ.get("WERKZEUG_RUN_MAIN"):
         threading.Timer(1.2, open_browser, args=[port]).start()
-    app.run(host="127.0.0.1", port=port, debug=True)
+    app.run(host="127.0.0.1", port=port, debug=not is_frozen, use_reloader=not is_frozen)

@@ -3,8 +3,76 @@
 {% block page_title %}系統設定{% endblock %}
 
 {% block content %}
+
+<!-- 帳號管理（老闆專屬，全寬） -->
+{% if session.get('role') == '老闆' %}
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="section-title mb-0" style="font-size:1rem"><i class="bi bi-people me-2"></i>帳號管理</div>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+      <i class="bi bi-plus-lg me-1"></i>新增帳號
+    </button>
+  </div>
+
+  {% if users %}
+  <div class="row g-3">
+    {% for u in users %}
+    <div class="col-md-6 col-xl-4">
+      <div class="p-3" style="background:var(--bg-base);border:1px solid var(--border);border-radius:12px">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div style="width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;
+            background:{% if u.role=='老闆' %}rgba(245,158,11,.15){% elif u.role=='會計' %}rgba(6,182,212,.15){% else %}rgba(99,102,241,.15){% endif %}">
+            <i class="bi bi-{% if u.role=='老闆' %}gem{% elif u.role=='會計' %}calculator{% else %}person-badge{% endif %}"
+               style="color:{% if u.role=='老闆' %}#f59e0b{% elif u.role=='會計' %}#06b6d4{% else %}#818cf8{% endif %}"></i>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:.95rem;font-weight:600">
+              {{ u.username }}
+              {% if u.id == session.get('user_id') %}
+              <span class="badge bg-primary ms-1" style="font-size:.65rem;vertical-align:middle">我</span>
+              {% endif %}
+            </div>
+            <div style="font-size:.8rem;color:var(--text-muted)">
+              <span class="badge {% if u.role=='老闆' %}bg-warning text-dark{% elif u.role=='會計' %}bg-info text-dark{% else %}bg-secondary{% endif %}" style="font-size:.72rem">{{ u.role }}</span>
+              {% if u.staff_name %}
+              <span class="ms-1">{{ u.staff_name }}</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% if u.phone %}
+        <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+          <i class="bi bi-telephone me-1"></i>{{ u.phone }}
+        </div>
+        {% endif %}
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary flex-fill"
+                  onclick="openEditUser({{ u.id }}, {{ u.username|tojson }}, {{ u.role|tojson }}, {{ (u.staff_name or '')|tojson }}, {{ (u.phone or '')|tojson }})">
+            <i class="bi bi-pencil me-1"></i>編輯
+          </button>
+          {% if u.id != session.get('user_id') %}
+          <form method="post" action="{{ url_for('settings_user_delete', user_id=u.id) }}"
+                onsubmit="return confirm('確定刪除帳號「{{ u.username }}」？')">
+            <button type="submit" class="btn btn-sm btn-outline-danger px-3">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-muted">尚無其他帳號</div>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="row">
   <div class="col-lg-7">
+
+    {% if session.get('role') != '業務' %}
     <form method="post">
 
       <!-- Basic settings -->
@@ -65,9 +133,37 @@
         <i class="bi bi-check-lg me-1"></i>儲存設定
       </button>
     </form>
+    {% endif %}
+
+    <!-- 修改密碼（所有人） -->
+    <div class="card p-4 {% if session.get('role') != '業務' %}mt-3{% endif %}">
+      <div class="section-title"><i class="bi bi-key me-1"></i>修改密碼</div>
+      <form method="post">
+        <input type="hidden" name="_action" value="change_password">
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label">舊密碼</label>
+            <input type="password" name="old_password" class="form-control" required>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">新密碼</label>
+            <input type="password" name="new_password" class="form-control" required minlength="4">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">確認新密碼</label>
+            <input type="password" name="confirm_password" class="form-control" required minlength="4">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-outline-primary mt-3 px-4">
+          <i class="bi bi-check-lg me-1"></i>更新密碼
+        </button>
+      </form>
+    </div>
+
   </div>
 
   <div class="col-lg-5">
+
     <div class="card p-4">
       <div class="section-title"><i class="bi bi-info-circle me-1"></i>系統資訊</div>
       <div class="row g-2" style="font-size:.88rem">
@@ -81,4 +177,114 @@
     </div>
   </div>
 </div>
+
+<!-- 新增帳號 Modal（老闆專屬） -->
+{% if session.get('role') == '老闆' %}
+<div class="modal fade" id="addUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('settings_user_new') }}" autocomplete="off">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>新增帳號</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">職位</label>
+            <select name="role" class="form-select" id="newUserRole">
+              <option value="業務">業務</option>
+              <option value="會計">會計</option>
+            </select>
+          </div>
+          <div id="staffInfoGroup">
+            <div class="row g-2 mb-3">
+              <div class="col-7">
+                <label class="form-label">姓名</label>
+                <input type="text" name="name" class="form-control" placeholder="真實姓名">
+              </div>
+              <div class="col-5">
+                <label class="form-label">電話</label>
+                <input type="text" name="phone" class="form-control" placeholder="選填">
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">登入帳號</label>
+            <input type="text" name="username" class="form-control" required autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">密碼（至少 4 個字元）</label>
+            <input type="password" name="password" class="form-control" required minlength="4" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>建立帳號
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯帳號 Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" id="editUserForm" autocomplete="off">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>編輯帳號</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="editStaffInfoGroup">
+            <div class="row g-2 mb-3">
+              <div class="col-7">
+                <label class="form-label">姓名</label>
+                <input type="text" name="name" id="editName" class="form-control">
+              </div>
+              <div class="col-5">
+                <label class="form-label">電話</label>
+                <input type="text" name="phone" id="editPhone" class="form-control">
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">登入帳號</label>
+            <input type="text" name="username" id="editUsername" class="form-control" required autocomplete="off">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">新密碼 <span class="text-muted" style="font-size:.8rem">（留空不更改）</span></label>
+            <input type="password" name="new_password" class="form-control" minlength="4" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>儲存
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('newUserRole').addEventListener('change', function() {
+  document.getElementById('staffInfoGroup').style.display =
+    this.value === '業務' ? '' : 'none';
+});
+
+function openEditUser(id, username, role, name, phone) {
+  document.getElementById('editUserForm').action = `/settings/users/${id}/edit`;
+  document.getElementById('editUsername').value = username;
+  document.getElementById('editName').value = name || '';
+  document.getElementById('editPhone').value = phone || '';
+  document.getElementById('editStaffInfoGroup').style.display = role === '業務' ? '' : 'none';
+  new bootstrap.Modal(document.getElementById('editUserModal')).show();
+}
+</script>
+{% endif %}
+
 {% endblock %}

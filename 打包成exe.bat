@@ -22,12 +22,15 @@ if exist "當鋪管理系統.spec" del "當鋪管理系統.spec"
 
 :: 打包
 echo [2/3] 開始打包（約需 1-3 分鐘）...
-pyinstaller --onedir --console ^
+pyinstaller --onedir --noconsole ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
   --name "當鋪管理系統" ^
   --hidden-import "dateutil" ^
   --hidden-import "dateutil.relativedelta" ^
+  --hidden-import "werkzeug.security" ^
+  --hidden-import "openpyxl" ^
+  --collect-submodules "openpyxl" ^
   app.py
 
 if errorlevel 1 (

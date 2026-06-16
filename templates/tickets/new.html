@@ -90,7 +90,12 @@
       </div>
 
       <!-- 業務員 -->
-      {% if staff_list %}
+      {% if session.get('role') == '業務' %}
+      <div class="card p-4 mb-3">
+        <div class="section-title"><i class="bi bi-person-badge me-1"></i>負責業務員</div>
+        <input type="text" class="form-control" value="{{ session.get('username') }}" disabled>
+      </div>
+      {% elif staff_list %}
       <div class="card p-4 mb-3">
         <div class="section-title"><i class="bi bi-person-badge me-1"></i>負責業務員</div>
         <select name="staff_id" class="form-select">
@@ -165,9 +170,15 @@ categorySelect.addEventListener('change', () => {
 });
 
 function addMonths(dateStr, months) {
-  const d = new Date(dateStr);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().split('T')[0];
+  const parts = dateStr.split('-');
+  let year = parseInt(parts[0]);
+  let month = parseInt(parts[1]);
+  const day = parseInt(parts[2]);
+  month += months;
+  while (month > 12) { month -= 12; year += 1; }
+  const lastDay = new Date(year, month, 0).getDate();
+  const clamped = Math.min(day, lastDay);
+  return `${year}-${String(month).padStart(2,'0')}-${String(clamped).padStart(2,'0')}`;
 }
 
 function fmt(n) {

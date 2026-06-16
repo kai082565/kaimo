@@ -42,23 +42,27 @@
 
   <nav class="sidebar-nav flex-grow-1">
 
+    {% if session.get('role') != '業務' %}
     <span class="nav-section">總覽</span>
     <a href="{{ url_for('dashboard') }}"
        class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">
       <i class="bi bi-speedometer2"></i><span>儀表板</span>
     </a>
+    {% endif %}
 
     <span class="nav-section">當票</span>
+    {% if session.get('role') != '業務' %}
     <a href="{{ url_for('tickets') }}"
        class="nav-link {% if request.endpoint=='tickets' %}active{% endif %}">
       <i class="bi bi-ticket-perforated"></i><span>當票管理</span>
     </a>
+    {% endif %}
     <a href="{{ url_for('tickets_monthly') }}"
-       class="nav-link nav-sub {% if request.endpoint=='tickets_monthly' %}active{% endif %}">
+       class="nav-link {{ '' if session.get('role') == '業務' else 'nav-sub' }} {% if request.endpoint=='tickets_monthly' %}active{% endif %}">
       <i class="bi bi-calendar-check"></i><span>當月應收</span>
     </a>
     <a href="{{ url_for('tickets_unpaid') }}"
-       class="nav-link nav-sub {% if request.endpoint=='tickets_unpaid' %}active{% endif %}">
+       class="nav-link {{ '' if session.get('role') == '業務' else 'nav-sub' }} {% if request.endpoint=='tickets_unpaid' %}active{% endif %}">
       <i class="bi bi-exclamation-circle"></i><span>應收未收</span>
     </a>
 
@@ -67,13 +71,10 @@
        class="nav-link {% if 'customer' in request.endpoint %}active{% endif %}">
       <i class="bi bi-people"></i><span>客戶管理</span>
     </a>
+    {% if session.get('role') != '業務' %}
     <a href="{{ url_for('performance') }}"
        class="nav-link {% if request.endpoint in ['performance','performance_export'] %}active{% endif %}">
       <i class="bi bi-trophy"></i><span>業績排名</span>
-    </a>
-    <a href="{{ url_for('staff_list') }}"
-       class="nav-link nav-sub {% if 'staff' in request.endpoint %}active{% endif %}">
-      <i class="bi bi-person-badge"></i><span>業務員管理</span>
     </a>
     <a href="{{ url_for('accounts_overdue') }}"
        class="nav-link {% if request.endpoint and 'accounts' in request.endpoint %}active{% endif %}">
@@ -87,12 +88,39 @@
        class="nav-link {% if request.endpoint=='settings' %}active{% endif %}">
       <i class="bi bi-gear"></i><span>系統設定</span>
     </a>
+    {% else %}
+    <a href="{{ url_for('settings') }}"
+       class="nav-link {% if request.endpoint=='settings' %}active{% endif %}">
+      <i class="bi bi-gear"></i><span>帳號設定</span>
+    </a>
+    {% endif %}
+
+    <span class="nav-section">其他</span>
+    <a href="{{ url_for('blacklist') }}"
+       class="nav-link {% if request.endpoint=='blacklist' %}active{% endif %}">
+      <i class="bi bi-person-fill-slash"></i><span>黑名單</span>
+    </a>
 
   </nav>
 
-  <div class="sidebar-footer">
-    <i class="bi bi-clock me-1"></i>
-    <span id="clock"></span>
+  <div class="sidebar-footer" style="flex-direction:column;align-items:flex-start;gap:.4rem;padding:.75rem 1rem">
+    <div style="display:flex;align-items:center;gap:.5rem;width:100%">
+      <i class="bi bi-person-circle" style="font-size:1.1rem;color:var(--accent)"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          {{ session.get('username', '') }}
+        </div>
+        <div style="font-size:.72rem;color:var(--text-muted)">{{ session.get('role', '') }}</div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="btn btn-sm"
+         style="padding:.2rem .45rem;font-size:.75rem;border:1px solid var(--border);color:var(--text-muted)"
+         title="登出">
+        <i class="bi bi-box-arrow-right"></i>
+      </a>
+    </div>
+    <div style="font-size:.75rem;color:var(--text-muted)">
+      <i class="bi bi-clock me-1"></i><span id="clock"></span>
+    </div>
   </div>
 </div>
 

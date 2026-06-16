@@ -133,6 +133,25 @@ def init_db():
                 notes          TEXT,
                 created_at     TEXT DEFAULT (datetime('now','localtime'))
             );
+
+            CREATE TABLE IF NOT EXISTS blacklist (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                id_card    TEXT,
+                phone      TEXT,
+                reason     TEXT NOT NULL,
+                notes      TEXT,
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role          TEXT NOT NULL,
+                staff_id      INTEGER REFERENCES staff(id),
+                created_at    TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
 
         # migration: staff_id on tickets
@@ -347,11 +366,12 @@ def _enrich_ticket(d, conn, today):
     return d
 
 
-def list_tickets_monthly():
+def list_tickets_monthly(staff_id=None):
     """當月應收：有任一未付期數的應繳日期在本月，顯示本月那一期的資料"""
     ym = date.today().strftime("%Y-%m")
     today = date.today().isoformat()
-    sql = """
+    staff_cond = " AND t.staff_id=?" if staff_id else ""
+    sql = f"""
         SELECT t.*, c.name AS customer_name, cat.name AS category_name
         FROM tickets t
         LEFT JOIN customers c ON t.customer_id=c.id
@@ -363,10 +383,14 @@ def list_tickets_monthly():
                 AND strftime('%Y-%m', due_date)=?
                 AND due_date >= ?
           )
+          {staff_cond}
         ORDER BY t.id DESC
     """
+    params = [ym, today]
+    if staff_id:
+        params.append(staff_id)
     with get_conn() as conn:
-        rows = conn.execute(sql, (ym, today)).fetchall()
+        rows = conn.execute(sql, params).fetchall()
         result = []
         for r in rows:
             d = _enrich_ticket(dict(r), conn, today)
@@ -391,10 +415,11 @@ def list_tickets_monthly():
     return result
 
 
-def list_tickets_unpaid():
+def list_tickets_unpaid(staff_id=None):
     """應收未收：最近一期未付的應繳日期已逾期（早於今天）"""
     today = date.today().isoformat()
-    sql = """
+    staff_cond = " AND t.staff_id=?" if staff_id else ""
+    sql = f"""
         SELECT t.*, c.name AS customer_name, cat.name AS category_name
         FROM tickets t
         LEFT JOIN customers c ON t.customer_id=c.id
@@ -410,10 +435,14 @@ def list_tickets_unpaid():
                       AND ps2.status='pending'
                 )
           )
+          {staff_cond}
         ORDER BY t.id DESC
     """
+    params = [today]
+    if staff_id:
+        params.append(staff_id)
     with get_conn() as conn:
-        rows = conn.execute(sql, (today,)).fetchall()
+        rows = conn.execute(sql, params).fetchall()
         result = [_enrich_ticket(dict(r), conn, today) for r in rows]
     return result
 
@@ -623,7 +652,7 @@ def forfeit_ticket(ticket_id: int, notes: str = ""):
 
 # ── 客戶 CRUD ─────────────────────────────────────────
 
-def list_customers(search=None):
+def list_customers(search=None, staff_id=None):
     sql = """SELECT c.*,
                     COUNT(t.id) AS ticket_count,
                     SUM(CASE WHEN t.status='active' THEN t.principal ELSE 0 END) AS active_principal
@@ -631,6 +660,9 @@ def list_customers(search=None):
              LEFT JOIN tickets t ON t.customer_id=c.id
              WHERE 1=1"""
     params = []
+    if staff_id:
+        sql += " AND c.id IN (SELECT DISTINCT customer_id FROM tickets WHERE staff_id=? AND customer_id IS NOT NULL)"
+        params.append(staff_id)
     if search:
         sql += " AND (c.name LIKE ? OR c.phone LIKE ? OR c.id_card LIKE ?)"
         like = f"%{search}%"
@@ -1503,3 +1535,115 @@ def update_transaction(tx_id: int, data: dict):
 def delete_transaction(tx_id: int):
     with get_conn() as conn:
         conn.execute("DELETE FROM transactions WHERE id=?", (tx_id,))
+
+
+# ── 使用者帳號 ────────────────────────────────────────
+
+def has_any_user() -> bool:
+    with get_conn() as conn:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0
+
+
+def get_user_by_username(username: str):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_user(user_id: int):
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def create_user(data: dict) -> int:
+    from werkzeug.security import generate_password_hash
+    staff_id = None
+    if data.get("role") == "業務":
+        name = data.get("name", "").strip() or data["username"].strip()
+        staff_id = create_staff({"name": name, "phone": data.get("phone", "").strip()})
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash, role, staff_id) VALUES (?,?,?,?)",
+            (data["username"].strip(),
+             generate_password_hash(data["password"]),
+             data["role"],
+             staff_id)
+        )
+        return cur.lastrowid
+
+
+def update_user(user_id: int, data: dict):
+    with get_conn() as conn:
+        user = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not user:
+            return
+        if data.get("username"):
+            conn.execute("UPDATE users SET username=? WHERE id=?",
+                         (data["username"].strip(), user_id))
+        if data.get("new_password"):
+            from werkzeug.security import generate_password_hash
+            conn.execute("UPDATE users SET password_hash=? WHERE id=?",
+                         (generate_password_hash(data["new_password"]), user_id))
+        if user["staff_id"] and user["role"] == "業務":
+            conn.execute("UPDATE staff SET name=?, phone=? WHERE id=?",
+                         (data.get("name", "").strip(),
+                          data.get("phone", "").strip(),
+                          user["staff_id"]))
+
+
+def list_users():
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT u.*, s.name AS staff_name, s.phone AS phone
+            FROM users u LEFT JOIN staff s ON u.staff_id=s.id
+            ORDER BY u.role, u.username
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_user(user_id: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+
+
+def update_user_password(user_id: int, new_password: str):
+    from werkzeug.security import generate_password_hash
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash=? WHERE id=?",
+            (generate_password_hash(new_password), user_id)
+        )
+
+
+# ── 黑名單 ────────────────────────────────────────────
+
+def list_blacklist(search=None):
+    sql = "SELECT * FROM blacklist WHERE 1=1"
+    params = []
+    if search:
+        sql += " AND (name LIKE ? OR id_card LIKE ? OR phone LIKE ?)"
+        like = f"%{search}%"
+        params += [like, like, like]
+    sql += " ORDER BY id DESC"
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_blacklist(data: dict) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO blacklist (name, id_card, phone, reason, notes) VALUES (?,?,?,?,?)",
+            (data["name"].strip(),
+             data.get("id_card", "").strip(),
+             data.get("phone", "").strip(),
+             data["reason"],
+             data.get("notes", "").strip())
+        )
+        return cur.lastrowid
+
+
+def delete_blacklist(bid: int):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM blacklist WHERE id=?", (bid,))

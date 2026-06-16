@@ -7,9 +7,6 @@
      class="btn btn-outline-success btn-sm">
     <i class="bi bi-file-earmark-excel me-1"></i>匯出 Excel
   </a>
-  <a href="{{ url_for('staff_list') }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-person-badge me-1"></i>管理業務員
-  </a>
 {% endblock %}
 
 {% block content %}
@@ -29,7 +26,7 @@
     </select>
   </form>
   <span class="text-muted" style="font-size:.85rem">
-    期間：{{ year }}/{{ "%02d"|format(month) }}/01 — {{ year }}/{{ "%02d"|format(month) }}/{{ [31,28,31,30,31,30,31,31,30,31,30,31][month-1] }}
+    期間：{{ year }}/{{ "%02d"|format(month) }}/01 — {{ year }}/{{ "%02d"|format(month) }}/{{ last_day }}
   </span>
 </div>
 
@@ -187,7 +184,7 @@
     <i class="bi bi-trophy"></i>
     <div>本月尚無業績資料</div>
     <div style="font-size:.85rem; margin-top:.5rem">
-      請先至「<a href="{{ url_for('staff_list') }}">業務員管理</a>」新增業務員，並在開立當票時選擇負責業務員。
+      請先在「系統設定」新增業務帳號，並在開立當票時選擇負責業務員。
     </div>
   </div>
   {% endif %}

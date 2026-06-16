@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}黑名單{% endblock %}
+{% block page_title %}黑名單{% endblock %}
+
+{% block topbar_actions %}
+{% if session.get('role') in ('老闆', '會計') %}
+<button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">
+  <i class="bi bi-file-earmark-arrow-up me-1"></i>匯入 Excel
+</button>
+<button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#addModal">
+  <i class="bi bi-person-fill-slash me-1"></i>加入黑名單
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- 搜尋 -->
+<form class="mb-4" method="get">
+  <div class="input-group" style="max-width:380px">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input type="text" name="q" class="form-control" placeholder="搜尋姓名、身分證、電話…"
+           value="{{ search }}">
+    {% if search %}
+    <a href="{{ url_for('blacklist') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-x-lg"></i>
+    </a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- 統計卡片 -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-4 col-lg-3">
+    <div class="stat-card">
+      <div class="stat-label"><i class="bi bi-person-fill-slash me-1"></i>黑名單總數</div>
+      <div class="stat-value">{{ rows | length }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4 col-lg-3">
+    <div class="stat-card">
+      <div class="stat-label"><i class="bi bi-chat-dots me-1"></i>詢問</div>
+      <div class="stat-value" style="color:#f59e0b">{{ rows | selectattr('reason','eq','詢問') | list | length }}</div>
+    </div>
+  </div>
+  <div class="col-sm-4 col-lg-3">
+    <div class="stat-card">
+      <div class="stat-label"><i class="bi bi-exclamation-triangle me-1"></i>呆帳</div>
+      <div class="stat-value" style="color:#ef4444">{{ rows | selectattr('reason','eq','呆帳') | list | length }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- 名單 -->
+{% if rows %}
+<div class="card p-0" style="overflow:hidden">
+  <table class="table table-hover mb-0">
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>姓名</th>
+        <th>身分證</th>
+        <th>電話</th>
+        <th>原因</th>
+        <th>備註</th>
+        <th>加入時間</th>
+        {% if session.get('role') in ('老闆', '會計') %}
+        <th style="width:60px"></th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="text-muted" style="font-size:.82rem">{{ loop.index }}</td>
+        <td style="font-weight:600">{{ r.name }}</td>
+        <td class="text-muted">{{ r.id_card or '—' }}</td>
+        <td class="text-muted">{{ r.phone or '—' }}</td>
+        <td>
+          <span class="badge {% if r.reason == '呆帳' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+            {{ r.reason }}
+          </span>
+        </td>
+        <td class="text-muted" style="font-size:.85rem;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          {{ r.notes or '—' }}
+        </td>
+        <td class="text-muted" style="font-size:.82rem">{{ r.created_at[:10] }}</td>
+        {% if session.get('role') in ('老闆', '會計') %}
+        <td>
+          <form method="post" action="{{ url_for('blacklist_delete', bid=r.id) }}"
+                onsubmit="return confirm('確定將「{{ r.name }}」從黑名單移除？')">
+            <button type="submit" class="btn btn-sm btn-outline-danger" style="padding:.2rem .45rem">
+              <i class="bi bi-trash3"></i>
+            </button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-person-fill-slash"></i>
+  <div>黑名單目前為空</div>
+  {% if search %}
+  <div style="font-size:.85rem;margin-top:.5rem">找不到符合「{{ search }}」的記錄</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- 新增 Modal -->
+{% if session.get('role') in ('老闆', '會計') %}
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('blacklist_new') }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-person-fill-slash me-2"></i>加入黑名單</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label">姓名 <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">原因 <span class="text-danger">*</span></label>
+              <select name="reason" class="form-select" required>
+                <option value="詢問">詢問</option>
+                <option value="呆帳">呆帳</option>
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">身分證字號</label>
+              <input type="text" name="id_card" class="form-control" placeholder="選填">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">電話</label>
+              <input type="text" name="phone" class="form-control" placeholder="選填">
+            </div>
+            <div class="col-12">
+              <label class="form-label">備註</label>
+              <textarea name="notes" class="form-control" rows="2" placeholder="選填"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-check-lg me-1"></i>加入黑名單
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 匯入 Modal -->
+{% if session.get('role') in ('老闆', '會計') %}
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('blacklist_import') }}" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-file-earmark-arrow-up me-2"></i>匯入 Excel</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-4 p-3" style="background:var(--bg-base);border-radius:8px;border:1px solid var(--border);font-size:.85rem">
+            <div style="font-weight:600;margin-bottom:.5rem"><i class="bi bi-info-circle me-1"></i>Excel 欄位格式（第一列為標題，從第二列開始匯入）</div>
+            <table class="table table-sm mb-0" style="font-size:.82rem">
+              <thead>
+                <tr>
+                  <th>A 欄</th><th>B 欄</th><th>C 欄</th><th>D 欄</th><th>E 欄</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>姓名 <span class="text-danger">*</span></td>
+                  <td>身分證</td>
+                  <td>電話</td>
+                  <td>原因<br><span class="text-muted">詢問／呆帳</span></td>
+                  <td>備註</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="text-muted mt-2">原因欄若空白或非「詢問」「呆帳」，自動填入「詢問」</div>
+          </div>
+          <div>
+            <label class="form-label">選擇 Excel 檔案（.xlsx）</label>
+            <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-upload me-1"></i>開始匯入
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
